@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { env, required } from "@/lib/env";
+import { env } from "@/lib/env";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -9,8 +9,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Auth.js v5 would otherwise look for AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET.
       // We pass them explicitly so one pair of env vars serves both the app and
       // scripts/drive-token.mjs, which use the same OAuth client.
-      clientId: required("GOOGLE_CLIENT_ID"),
-      clientSecret: required("GOOGLE_CLIENT_SECRET"),
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
       authorization: { params: { prompt: "select_account" } },
     }),
   ],
