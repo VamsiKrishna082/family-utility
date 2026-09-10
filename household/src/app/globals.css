@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3f1ed;
+  --card: #ffffff;
+  --ink: #232028;
+  --dim: #6b6774;
+  --faint: #9995a2;
+  --line: #e3e0da;
+  --line2: #edeae4;
+  --green: #2f6b4f;
+  --red: #b44b44;
+  --amber: #c08339;
+  --indigo: #5e6bc4;
+  --display: "Fraunces", Georgia, serif;
+  --ui: "Karla", ui-sans-serif, system-ui, sans-serif;
+}
+
+html, body { background: var(--paper); color: var(--ink); font-family: var(--ui); }
+* { -webkit-tap-highlight-color: transparent; }
+button, input { font-family: inherit; }
+input::placeholder { color: var(--faint); }
+
+.display { font-family: var(--display); font-weight: 400; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.btn {
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  transition: filter .14s ease, transform .14s ease;
+}
+.btn:active { transform: scale(.985); }
+.btn-dark { background: var(--ink); color: #fff; }
+.btn-plain { background: var(--card); border: 1px solid var(--line); color: var(--ink); }
+.btn:hover { filter: brightness(.97); }
+
+/* Photos fade in over their blur placeholder instead of popping. */
+.fade-in { opacity: 0; transition: opacity .35s ease; }
+.fade-in.loaded { opacity: 1; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Loading tile: a slow sweep, calmer than a spinner in a grid. */
+.shimmer {
+  background: linear-gradient(90deg, var(--line2) 0%, #f7f5f1 50%, var(--line2) 100%);
+  background-size: 200% 100%;
+  animation: sweep 1.4s ease-in-out infinite;
+}
+@keyframes sweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
