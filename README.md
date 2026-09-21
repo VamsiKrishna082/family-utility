@@ -7,9 +7,16 @@ A private website for two people. Public URL, allowlisted door.
 ## What it is
 
 One Next.js app on Cloud Run. It serves the pages and the API — no separate backend.
-Everything is stored in Google Drive. There is no database, no second bucket, no queue.
+Album and Documents live entirely in Google Drive (no database for either). The other
+nine sections are small structured records — a budget entry, a bill, a bag of list
+items — that don't map to files, so they live in Firestore instead: one collection per
+section, read and written only from server-side API routes with the same service
+account's credentials that talk to Drive. There's still no client SDK, no security
+rules, no queue — the allowlist check in every route is the only door, same as Drive.
 
-Sections: **Album** (live) · Money · Net worth · Documents · Lists · Bills · Dates · Trips · Wishlist · Vehicles · Emergency.
+All sections are live: **Album** · Money · Net worth · Documents · Lists · Bills ·
+Dates · Trips · Wishlist · Vehicles · Emergency. Currency throughout is INR
+(`src/lib/money.ts`).
 
 ---
 
@@ -78,8 +85,6 @@ a new `src/lib/gcs.ts` would handle thumbnails. Nothing else changes.
 
 ## Env vars
 
-All eight are required.
-
 | Var | Where it is used | What it is |
 |---|---|---|
 | `AUTH_SECRET` | `src/lib/auth.ts` | Signs JWT sessions — `openssl rand -base64 32` |
@@ -89,7 +94,10 @@ All eight are required.
 | `GOOGLE_CLIENT_SECRET` | `src/lib/auth.ts`, `src/lib/drive.ts` | OAuth 2.0 client secret |
 | `ALLOWED_EMAILS` | `src/lib/env.ts` → `src/lib/auth.ts` | Comma-separated, lowercase — the only addresses that can sign in |
 | `DRIVE_REFRESH_TOKEN` | `src/lib/drive.ts` | Long-lived token for the Drive owner account |
-| `DRIVE_ROOT_FOLDER_ID` | `src/lib/drive.ts` | Drive folder ID that is the root of the library |
+| `DRIVE_ROOT_FOLDER_ID` | `src/lib/drive.ts` | Drive folder ID that is the root of the Album library |
+| `DRIVE_DOCS_ROOT_FOLDER_ID` | `src/lib/drive.ts` | A separate Drive folder that is the root of the Documents library |
+| `GOOGLE_CLOUD_PROJECT` | `src/lib/gcs.ts`, `src/lib/firestore.ts` | GCP project ID — also selects the Firestore database |
+| `GCS_BUCKET` | `src/lib/gcs.ts` | The bucket that caches generated WebP thumbnails |
 
 ---
 
@@ -205,8 +213,11 @@ gcloud run services update-traffic household --region=$REGION --to-revisions=<ol
 **`--min-instances=1`** — the in-process folder cache lives in memory. A cold start
 means the first listing re-fetches from Drive. One warm instance costs a few rupees a month.
 
-**IAM** — no extra roles needed beyond Secret Manager access. Drive access comes from
-`DRIVE_REFRESH_TOKEN`, not from the GCP service identity.
+**IAM** — the service account needs `roles/secretmanager.secretAccessor` (the three
+secrets), `roles/storage.objectAdmin` scoped to just the thumbnail bucket, and
+`roles/datastore.user` for Firestore. Drive access itself comes from
+`DRIVE_REFRESH_TOKEN`, not from the GCP service identity — nothing Drive-related needs
+an IAM role.
 
 **`--allow-unauthenticated`** is intentional — the allowlist is the door, not GCP IAM.
 

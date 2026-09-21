@@ -43,10 +43,11 @@ export async function uploadOne(
   file: File,
   folderId: string | null,
   onProgress: (pct: number) => void,
+  sessionEndpoint = "/api/uploads/session",
 ): Promise<void> {
   const mimeType = file.type || "application/octet-stream";
 
-  const res = await fetch("/api/uploads/session", {
+  const res = await fetch(sessionEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ folderId, name: file.name, mimeType, size: file.size }),

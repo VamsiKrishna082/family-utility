@@ -32,6 +32,11 @@ export function rootId(): string {
   return required("DRIVE_ROOT_FOLDER_ID");
 }
 
+/** Documents gets its own top-level folder — kept separate from Album so the two don't mix in one listing. */
+export function docsRootId(): string {
+  return required("DRIVE_DOCS_ROOT_FOLDER_ID");
+}
+
 /* ------------------------------------------------------------------ */
 /* Caches                                                              */
 /* ------------------------------------------------------------------ */
@@ -123,12 +128,12 @@ async function node(id: string): Promise<{ name: string; parent: string | null }
 }
 
 /**
- * Walks up to the library root, which doubles as the security check:
- * a folder ID that does not descend from the root is rejected, so nobody
- * can browse the rest of the owner's Drive by guessing IDs.
+ * Walks up to the given root, which doubles as the security check: a folder
+ * ID that does not descend from that root is rejected, so nobody can browse
+ * the rest of the owner's Drive by guessing IDs. Album and Documents each
+ * pass their own root — two separate trees, one Drive account.
  */
-export async function breadcrumbs(folderId: string): Promise<Crumb[]> {
-  const root = rootId();
+export async function breadcrumbs(folderId: string, root: string): Promise<Crumb[]> {
   if (folderId === root) return [];
 
   const trail: Crumb[] = [];
@@ -219,4 +224,9 @@ export async function thumbnail(fileId: string, width: number): Promise<{ body: 
 export async function mimeOf(fileId: string): Promise<string> {
   const res = await drive().files.get({ fileId, fields: "mimeType", supportsAllDrives: true });
   return res.data.mimeType ?? "application/octet-stream";
+}
+
+export async function fileMeta(fileId: string): Promise<{ name: string; mimeType: string }> {
+  const res = await drive().files.get({ fileId, fields: "name,mimeType", supportsAllDrives: true });
+  return { name: res.data.name ?? "file", mimeType: res.data.mimeType ?? "application/octet-stream" };
 }

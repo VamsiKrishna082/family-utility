@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     const folderId = asked && asked !== "root" ? asked : rootId();
 
     // breadcrumbs() also proves the folder sits inside the library, so it must run first.
-    const [crumbs, entries] = await Promise.all([breadcrumbs(folderId), listFolder(folderId)]);
+    const [crumbs, entries] = await Promise.all([breadcrumbs(folderId, rootId()), listFolder(folderId)]);
 
     const body: BrowseResponse = { folderId, crumbs, entries };
     return ok(body);

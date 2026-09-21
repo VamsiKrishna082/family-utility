@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { breadcrumbs, createFolder, rootId } from "@/lib/drive";
+import { breadcrumbs, createFolder, docsRootId } from "@/lib/drive";
 import { ok, fail } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -14,9 +14,9 @@ export async function POST(req: Request) {
   try {
     await requireUser();
     const { name, parentId } = Body.parse(await req.json());
-    const parent = parentId ?? rootId();
+    const parent = parentId ?? docsRootId();
 
-    await breadcrumbs(parent, rootId()); // rejects anything outside the library
+    await breadcrumbs(parent, docsRootId());
     const folder = await createFolder(name, parent);
 
     return ok({ folder });

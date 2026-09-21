@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { breadcrumbs, createUploadSession, invalidate, rootId } from "@/lib/drive";
+import { breadcrumbs, createUploadSession, invalidate, docsRootId } from "@/lib/drive";
 import { ok, fail } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -12,17 +12,13 @@ const Body = z.object({
   size: z.number().int().positive(),
 });
 
-/**
- * The only step an upload needs from the server. Afterwards the browser talks
- * to Google directly and then just refreshes the listing — there is nothing to record.
- */
 export async function POST(req: Request) {
   try {
     await requireUser();
     const body = Body.parse(await req.json());
-    const parentId = body.folderId ?? rootId();
+    const parentId = body.folderId ?? docsRootId();
 
-    await breadcrumbs(parentId, rootId());
+    await breadcrumbs(parentId, docsRootId());
 
     const uploadUrl = await createUploadSession({
       name: body.name,
@@ -31,7 +27,7 @@ export async function POST(req: Request) {
       parentId,
     });
 
-    invalidate(parentId); // the listing is about to change
+    invalidate(parentId);
     return ok({ uploadUrl });
   } catch (e) {
     return fail(e);
