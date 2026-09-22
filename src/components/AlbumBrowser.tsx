@@ -5,12 +5,13 @@ import Link from "next/link";
 import useSWR from "swr";
 import {
   ChevronLeft, Folder, FolderPlus, Upload, Loader2, RefreshCw,
-  Search, X, CheckSquare, Trash2, Pencil, Star,
+  Search, X, CheckSquare, Trash2, Pencil, Star, Move, ImageOff,
 } from "lucide-react";
 import type { BrowseResponse, Entry, SearchResponse } from "@/lib/types";
 import { uploadOne, type UploadProgress } from "@/lib/upload";
 import { Thumb } from "@/components/Thumb";
 import { Lightbox } from "@/components/Lightbox";
+import { MoveDialog } from "@/components/MoveDialog";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url);
@@ -32,10 +33,17 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
 
   // One request for breadcrumbs, folders and media. Keeps the previous folder on
   // screen while the next loads, so navigation never flashes empty.
-  const { data, error, isLoading, mutate } = useSWR<BrowseResponse>(key, fetcher, {
+  const { data, error, isLoading, isValidating, mutate } = useSWR<BrowseResponse>(key, fetcher, {
     keepPreviousData: true,
     revalidateOnFocus: false,
   });
+  // keepPreviousData means clicking into a new folder shows the *old* one's
+  // contents, unchanged, until the fetch resolves — with a real Drive round
+  // trip behind it, that can be the better part of a second of "did my click
+  // even register?". isValidating (true during that fetch, unlike isLoading
+  // which only covers the very first load) drives a visible in-place spinner
+  // so the click has an immediate reaction even before the new folder is in.
+  const navigating = isValidating && Boolean(data);
 
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [lightbox, setLightbox] = useState<number | null>(null);
@@ -47,6 +55,17 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkFavoriting, setBulkFavoriting] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+
+  const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  }, []);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -65,6 +84,21 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
 
   const photoCount = useMemo(() => media.filter((m) => m.kind === "photo").length, [media]);
   const videoCount = useMemo(() => media.filter((m) => m.kind === "video").length, [media]);
+
+  /** media is already newest-taken-first (sortEntries), so a single pass groups it into contiguous month buckets. */
+  const groupedMedia = useMemo(() => {
+    const groups: { label: string; items: Entry[] }[] = [];
+    for (const m of media) {
+      const d = new Date(m.createdTime);
+      const label = Number.isNaN(d.getTime())
+        ? "Undated"
+        : d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(m);
+      else groups.push({ label, items: [m] });
+    }
+    return groups;
+  }, [media]);
 
   const handleFiles = useCallback(
     async (list: FileList | null) => {
@@ -171,6 +205,84 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
     },
     [data, mutate],
   );
+
+  /**
+   * Makes `item` this folder's cover tile, as seen from its parent's grid —
+   * invisible from in here, so there's nothing to optimistically update;
+   * setFolderCover() drops the parent's cache server-side, and the toast is
+   * the only feedback until the user navigates back up.
+   */
+  const setCover = useCallback(
+    async (item: Entry) => {
+      if (!data) return;
+      await patchItem(data.folderId, data.folderId, { cover: item.id });
+      showToast(`Set as cover for “${here}”`);
+    },
+    [data, here, showToast],
+  );
+
+  const unsetCover = useCallback(
+    async (folder: Entry) => {
+      if (!data) return;
+      await mutate({ ...data, entries: data.entries.map((e) => (e.id === folder.id ? { ...e, coverId: undefined } : e)) }, false);
+      try {
+        await patchItem(folder.id, data.folderId, { cover: null });
+      } finally {
+        mutate();
+      }
+    },
+    [data, mutate],
+  );
+
+  const moveItem = useCallback(
+    async (item: Entry, destId: string, destName: string) => {
+      if (!data) return;
+      setMoveTarget(null);
+      await mutate({ ...data, entries: data.entries.filter((e) => e.id !== item.id) }, false);
+      try {
+        await patchItem(item.id, data.folderId, { moveTo: destId });
+        showToast(`Moved to “${destName}”`);
+      } finally {
+        mutate();
+      }
+    },
+    [data, mutate, showToast],
+  );
+
+  const bulkMove = useCallback(
+    async (destId: string, destName: string) => {
+      if (!data || selectedIds.size === 0) return;
+      const ids = [...selectedIds];
+      setBulkMoveOpen(false);
+      await mutate({ ...data, entries: data.entries.filter((e) => !selectedIds.has(e.id)) }, false);
+      try {
+        await fetch("/api/media/bulk-move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, from: data.folderId, to: destId }),
+        });
+        showToast(`Moved ${ids.length} item${ids.length === 1 ? "" : "s"} to “${destName}”`);
+      } finally {
+        exitSelectMode();
+        mutate();
+      }
+    },
+    [data, mutate, selectedIds, showToast],
+  );
+
+  const bulkFavorite = async () => {
+    if (!data || selectedIds.size === 0) return;
+    setBulkFavoriting(true);
+    const ids = [...selectedIds];
+    await mutate({ ...data, entries: data.entries.map((e) => (selectedIds.has(e.id) ? { ...e, starred: true } : e)) }, false);
+    try {
+      await Promise.allSettled(ids.map((id) => patchItem(id, data.folderId, { starred: true })));
+    } finally {
+      setBulkFavoriting(false);
+      exitSelectMode();
+      mutate();
+    }
+  };
 
   const startFolderRename = (f: Entry) => {
     setRenamingFolderId(f.id);
@@ -314,7 +426,10 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
         )}
 
         <div className="flex-1 min-w-0">
-          <h1 className="display" style={{ fontSize: 30, lineHeight: 1.15 }}>{here}</h1>
+          <h1 className="display flex items-center gap-2.5" style={{ fontSize: 30, lineHeight: 1.15 }}>
+            {here}
+            {navigating && <Loader2 size={18} className="spin" color="var(--faint)" />}
+          </h1>
           <p style={{ color: "var(--dim)", fontSize: 14, marginTop: 4 }}>
             {crumbs.length === 0
               ? "Everything, in folders"
@@ -397,12 +512,34 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           ) : (
             <>
               {searchFolders.length > 0 && (
-                <div className="mb-8" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }}>
+                <div className="mb-8" style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
                   {searchFolders.map((f) => (
-                    <Link key={f.id} href={`/album?folder=${f.id}`} className="card" style={{ padding: 18, display: "block" }} onClick={closeSearch}>
-                      <Folder size={19} color="#3e6b85" strokeWidth={1.8} />
-                      <p style={{ fontSize: 15, marginTop: 14 }} className="truncate">{f.name}</p>
-                      <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 2 }} className="truncate">{f.path}</p>
+                    <Link
+                      key={f.id}
+                      href={`/album?folder=${f.id}`}
+                      className="card block relative overflow-hidden"
+                      style={{ aspectRatio: "4 / 3", padding: 0 }}
+                      onClick={closeSearch}
+                    >
+                      {f.coverId ? (
+                        <img
+                          src={`/api/thumb/${f.coverId}?w=520`}
+                          alt=""
+                          loading="lazy"
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0, background: "var(--line2)" }}>
+                          <Folder size={30} color="#3e6b85" strokeWidth={1.5} />
+                        </span>
+                      )}
+                      <span style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,8,16,.68), rgba(10,8,16,0) 55%)" }} />
+                      <span className="truncate" style={{ position: "absolute", left: 14, right: 14, bottom: 26, color: "#fff", fontSize: 14.5, fontWeight: 600, textShadow: "0 1px 3px rgba(0,0,0,.35)" }}>
+                        {f.name}
+                      </span>
+                      <span className="truncate" style={{ position: "absolute", left: 14, right: 14, bottom: 10, color: "rgba(255,255,255,.75)", fontSize: 11.5 }}>
+                        {f.path}
+                      </span>
                     </Link>
                   ))}
                 </div>
@@ -477,6 +614,22 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
               <div className="flex gap-2" style={{ marginLeft: "auto" }}>
                 <button className="btn btn-plain" style={{ padding: "6px 12px", fontSize: 13 }} onClick={exitSelectMode}>Cancel</button>
                 <button
+                  className="btn btn-plain flex items-center gap-1.5"
+                  style={{ padding: "6px 12px", fontSize: 13 }}
+                  onClick={bulkFavorite}
+                  disabled={selectedIds.size === 0 || bulkFavoriting}
+                >
+                  <Star size={13} /> Favourite
+                </button>
+                <button
+                  className="btn btn-plain flex items-center gap-1.5"
+                  style={{ padding: "6px 12px", fontSize: 13 }}
+                  onClick={() => setBulkMoveOpen(true)}
+                  disabled={selectedIds.size === 0}
+                >
+                  <Move size={13} /> Move
+                </button>
+                <button
                   className="btn flex items-center gap-1.5"
                   style={{ padding: "6px 12px", fontSize: 13, background: "var(--red)", color: "#fff" }}
                   onClick={bulkDelete}
@@ -488,11 +641,25 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
             </div>
           )}
 
+          <div style={{ opacity: navigating ? 0.55 : 1, transition: "opacity .15s ease" }}>
+
           {crumbs.length === 0 && (
-            <div className="mb-8" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }}>
-              <Link href="/album/favorites" className="card" style={{ padding: 18, display: "block" }}>
-                <Star size={19} color="#c78a1e" fill="#ffc84a" strokeWidth={1.5} />
-                <p style={{ fontSize: 15, marginTop: 14 }}>Favourites</p>
+            <div className="mb-8" style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+              <Link
+                href="/album/favorites"
+                className="card block relative overflow-hidden"
+                style={{ aspectRatio: "4 / 3", padding: 0 }}
+              >
+                <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0, background: "var(--line2)" }}>
+                  <Star size={30} color="#c78a1e" fill="#ffc84a" strokeWidth={1.5} />
+                </span>
+                <span style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,8,16,.68), rgba(10,8,16,0) 55%)" }} />
+                <span
+                  className="truncate"
+                  style={{ position: "absolute", left: 14, right: 14, bottom: 12, color: "#fff", fontSize: 14.5, fontWeight: 600, textShadow: "0 1px 3px rgba(0,0,0,.35)" }}
+                >
+                  Favourites
+                </span>
               </Link>
             </div>
           )}
@@ -500,11 +667,15 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           {folders.length > 0 && (
             <div
               className="mb-8"
-              style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }}
+              style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}
             >
               {folders.map((f) =>
                 renamingFolderId === f.id ? (
-                  <div key={f.id} className="card flex items-center gap-1.5" style={{ padding: 12 }}>
+                  <div
+                    key={f.id}
+                    className="card flex items-center gap-1.5"
+                    style={{ padding: 12, aspectRatio: "4 / 3" }}
+                  >
                     <Folder size={17} color="#3e6b85" strokeWidth={1.8} className="shrink-0" />
                     <input
                       autoFocus
@@ -521,9 +692,38 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                   </div>
                 ) : (
                   <div key={f.id} className="group relative">
-                    <Link href={`/album?folder=${f.id}`} className="card" style={{ padding: 18, display: "block" }}>
-                      <Folder size={19} color="#3e6b85" strokeWidth={1.8} />
-                      <p style={{ fontSize: 15, marginTop: 14 }} className="truncate pr-9">{f.name}</p>
+                    <Link
+                      href={`/album?folder=${f.id}`}
+                      className="card block relative overflow-hidden"
+                      style={{ aspectRatio: "4 / 3", padding: 0 }}
+                    >
+                      {f.coverId ? (
+                        <img
+                          src={`/api/thumb/${f.coverId}?w=520`}
+                          alt=""
+                          loading="lazy"
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <span
+                          className="flex items-center justify-center"
+                          style={{ position: "absolute", inset: 0, background: "var(--line2)" }}
+                        >
+                          <Folder size={30} color="#3e6b85" strokeWidth={1.5} />
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          position: "absolute", inset: 0,
+                          background: "linear-gradient(to top, rgba(10,8,16,.68), rgba(10,8,16,0) 55%)",
+                        }}
+                      />
+                      <span
+                        className="truncate"
+                        style={{ position: "absolute", left: 14, right: 14, bottom: 12, color: "#fff", fontSize: 14.5, fontWeight: 600, textShadow: "0 1px 3px rgba(0,0,0,.35)" }}
+                      >
+                        {f.name}
+                      </span>
                     </Link>
                     <button
                       onClick={(e) => {
@@ -531,10 +731,10 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                         startFolderRename(f);
                       }}
                       aria-label="Rename folder"
-                      className="absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
-                      style={{ top: 14, right: 14, width: 24, height: 24, borderRadius: 7, background: "var(--line2)", transition: "opacity .15s ease" }}
+                      className="overlay-btn absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                      style={{ top: 10, right: 42, width: 26, height: 26, borderRadius: 8 }}
                     >
-                      <Pencil size={12} color="var(--dim)" />
+                      <Pencil size={12} color="#fff" />
                     </button>
                     <button
                       onClick={(e) => {
@@ -542,11 +742,25 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                         handleDelete(f);
                       }}
                       aria-label="Delete folder"
-                      className="absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
-                      style={{ top: 14, right: 44, width: 24, height: 24, borderRadius: 7, background: "var(--line2)", transition: "opacity .15s ease" }}
+                      className="overlay-btn absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                      style={{ top: 10, right: 10, width: 26, height: 26, borderRadius: 8 }}
                     >
-                      <Trash2 size={12} color="var(--red)" />
+                      <Trash2 size={12} color="#fff" />
                     </button>
+                    {f.coverId && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          unsetCover(f);
+                        }}
+                        aria-label="Remove folder cover"
+                        title="Remove folder cover"
+                        className="overlay-btn absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                        style={{ top: 10, left: 10, width: 26, height: 26, borderRadius: 8 }}
+                      >
+                        <ImageOff size={12} color="#fff" />
+                      </button>
+                    )}
                   </div>
                 ),
               )}
@@ -565,21 +779,30 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
               </p>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
-              {media.map((m) => (
-                <Thumb
-                  key={m.id}
-                  item={m}
-                  onOpen={() => openAt(m)}
-                  onDelete={() => handleDelete(m)}
-                  onToggleFavorite={() => toggleFavorite(m)}
-                  selectMode={selectMode}
-                  selected={selectedIds.has(m.id)}
-                  onToggleSelect={() => toggleSelect(m.id)}
-                />
-              ))}
-            </div>
+            groupedMedia.map((group) => (
+              <div key={group.label} className="mb-8 last:mb-0">
+                <p style={{ color: "var(--dim)", fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>{group.label}</p>
+                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
+                  {group.items.map((m) => (
+                    <Thumb
+                      key={m.id}
+                      item={m}
+                      onOpen={() => openAt(m)}
+                      onDelete={() => handleDelete(m)}
+                      onToggleFavorite={() => toggleFavorite(m)}
+                      onSetCover={() => setCover(m)}
+                      onMove={() => setMoveTarget(m)}
+                      selectMode={selectMode}
+                      selected={selectedIds.has(m.id)}
+                      onToggleSelect={() => toggleSelect(m.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))
           )}
+
+          </div>
         </>
       )}
 
@@ -592,6 +815,10 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           onDelete={deleteFromLightbox}
           onRename={renameFromLightbox}
           onToggleFavorite={toggleFavorite}
+          onMove={(item) => {
+            setLightbox(null);
+            setMoveTarget(item);
+          }}
         />
       )}
 
@@ -605,6 +832,27 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           onRename={searchRename}
           onToggleFavorite={searchToggleFavorite}
         />
+      )}
+
+      {moveTarget && data && (
+        <MoveDialog
+          currentFolderId={data.folderId}
+          onClose={() => setMoveTarget(null)}
+          onConfirm={(destId, destName) => moveItem(moveTarget, destId, destName)}
+        />
+      )}
+
+      {bulkMoveOpen && data && (
+        <MoveDialog currentFolderId={data.folderId} onClose={() => setBulkMoveOpen(false)} onConfirm={bulkMove} />
+      )}
+
+      {toast && (
+        <div
+          className="card"
+          style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 24, padding: "10px 18px", fontSize: 13.5, zIndex: 60 }}
+        >
+          {toast}
+        </div>
       )}
     </div>
   );

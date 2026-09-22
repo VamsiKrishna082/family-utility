@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, Trash2, Check, Star } from "lucide-react";
+import { Play, Trash2, Check, Star, ImagePlus, Move } from "lucide-react";
 import type { Entry } from "@/lib/types";
 
 /**
@@ -13,6 +13,8 @@ export function Thumb({
   onOpen,
   onDelete,
   onToggleFavorite,
+  onSetCover,
+  onMove,
   selectMode,
   selected,
   onToggleSelect,
@@ -21,6 +23,9 @@ export function Thumb({
   onOpen: () => void;
   onDelete?: () => void;
   onToggleFavorite?: () => void;
+  /** Makes this item its parent folder's cover tile. Photos/videos only. */
+  onSetCover?: () => void;
+  onMove?: () => void;
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
@@ -99,11 +104,8 @@ export function Thumb({
             onDelete();
           }}
           aria-label="Delete"
-          className="absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
-          style={{
-            top: 8, left: 8, width: 28, height: 28, borderRadius: 8,
-            background: "rgba(10,8,16,.55)", transition: "opacity .15s ease",
-          }}
+          className="overlay-btn absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+          style={{ top: 8, left: 8, width: 28, height: 28, borderRadius: 8 }}
         >
           <Trash2 size={13} color="#fff" strokeWidth={1.8} />
         </button>
@@ -116,13 +118,40 @@ export function Thumb({
             onToggleFavorite();
           }}
           aria-label={item.starred ? "Remove from favourites" : "Add to favourites"}
-          className={`absolute flex items-center justify-center ${item.starred ? "" : "opacity-0 group-hover:opacity-100"}`}
-          style={{
-            bottom: 8, right: 8, width: 28, height: 28, borderRadius: 8,
-            background: "rgba(10,8,16,.55)", transition: "opacity .15s ease",
-          }}
+          className={`overlay-btn absolute flex items-center justify-center ${item.starred ? "" : "opacity-0 group-hover:opacity-100"}`}
+          style={{ bottom: 8, right: 8, width: 28, height: 28, borderRadius: 8 }}
         >
           <Star size={13} color="#fff" fill={item.starred ? "#ffc84a" : "none"} stroke={item.starred ? "#ffc84a" : "#fff"} strokeWidth={1.8} />
+        </button>
+      )}
+
+      {onMove && !selectMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onMove();
+          }}
+          aria-label="Move to a different folder"
+          title="Move to a different folder"
+          className="overlay-btn absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+          style={{ bottom: 8, left: 8, width: 28, height: 28, borderRadius: 8 }}
+        >
+          <Move size={13} color="#fff" strokeWidth={1.8} />
+        </button>
+      )}
+
+      {onSetCover && !selectMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetCover();
+          }}
+          aria-label="Set as folder cover"
+          title="Set as folder cover"
+          className="overlay-btn absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+          style={{ top: 8, right: 8, width: 28, height: 28, borderRadius: 8 }}
+        >
+          <ImagePlus size={13} color="#fff" strokeWidth={1.8} />
         </button>
       )}
     </div>

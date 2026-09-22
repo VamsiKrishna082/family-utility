@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { signOut } from "@/lib/auth";
 
 export function TopBar({ email }: { email: string }) {
@@ -8,10 +9,10 @@ export function TopBar({ email }: { email: string }) {
       className="flex items-center justify-between px-5 md:px-10 py-4"
       style={{ borderBottom: "1px solid var(--line)", background: "var(--card)" }}
     >
-      <div className="flex items-center gap-2.5">
+      <Link href="/" className="flex items-center gap-2.5">
         <span style={{ width: 9, height: 9, borderRadius: 9, background: "var(--green)" }} />
         <span className="display" style={{ fontSize: 16.5 }}>Home</span>
-      </div>
+      </Link>
 
       <div className="flex items-center gap-3">
         <span

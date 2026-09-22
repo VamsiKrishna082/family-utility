@@ -45,6 +45,39 @@ input::placeholder { color: var(--faint); }
 .fade-in { opacity: 0; transition: opacity .35s ease; }
 .fade-in.loaded { opacity: 1; }
 
+/* Whole-tile links that go somewhere on click — folder tiles, the Favourites
+   tile, "back" buttons. Scoped to the <a> tag specifically so it never
+   touches the many non-clickable divs that also use .card (upload progress,
+   search box, toasts). */
+a.card {
+  cursor: pointer;
+  transition: filter .15s ease, transform .12s ease;
+}
+a.card:hover { filter: brightness(.96); }
+a.card:active { transform: scale(.985); }
+
+/* Small round icon buttons layered on a photo or folder cover — delete,
+   favourite, move, set-cover, rename, remove-cover. Their own hover/press
+   state, independent of the group-hover that reveals them. */
+.overlay-btn {
+  cursor: pointer;
+  background: rgba(10, 8, 16, .55);
+  transition: background-color .15s ease, transform .1s ease, opacity .15s ease;
+}
+.overlay-btn:hover { background: rgba(10, 8, 16, .8); }
+.overlay-btn:active { transform: scale(.88); }
+
+/* Plain icon buttons on the lightbox's dark backdrop — no background box,
+   just the glyph, so feedback is an opacity/scale nudge instead. */
+.icon-plain {
+  cursor: pointer;
+  opacity: .82;
+  transition: opacity .15s ease, transform .1s ease;
+}
+.icon-plain:hover:not(:disabled) { opacity: 1; }
+.icon-plain:active:not(:disabled) { transform: scale(.88); }
+.icon-plain:disabled { cursor: default; }
+
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

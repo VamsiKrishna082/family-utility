@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SECTIONS } from "@/lib/sections";
+import { OnThisDay } from "@/components/OnThisDay";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -55,6 +56,8 @@ export default function Launcher() {
           );
         })}
       </div>
+
+      <OnThisDay />
     </div>
   );
 }

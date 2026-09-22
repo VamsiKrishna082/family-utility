@@ -80,11 +80,12 @@ function toEntry(f: drive_v3.Schema$File): Entry {
     createdTime: exifTimeToIso(img?.time) ?? f.createdTime ?? new Date(0).toISOString(),
     hasThumb: isFolder ? false : Boolean(f.thumbnailLink),
     starred: Boolean(f.starred),
+    coverId: isFolder ? (f.appProperties?.coverId || undefined) : undefined,
   };
 }
 
 const MEDIA_FIELDS =
-  "id,name,mimeType,createdTime,thumbnailLink,parents,starred," +
+  "id,name,mimeType,createdTime,thumbnailLink,parents,starred,appProperties," +
   "imageMediaMetadata(width,height,time),videoMediaMetadata(width,height,durationMillis)";
 
 /**
@@ -240,6 +241,40 @@ export async function setStarred(fileId: string, starred: boolean): Promise<void
 }
 
 /**
+ * Picks which child photo/video represents a folder in its parent's grid.
+ * Stored as a custom property on the folder itself (Drive's own concept for
+ * exactly this — app-scoped key/value data, invisible in Drive's own UI) so
+ * there's no new storage. `coverId: null` clears it back to the plain icon.
+ *
+ * The caller (viewing `folderId` from inside) can't see its own tile, so
+ * there's nothing to optimistically update client-side — instead this drops
+ * the *parent's* listing cache directly, so the new cover is there the
+ * moment the caller navigates back up.
+ */
+export async function setFolderCover(folderId: string, coverId: string | null): Promise<void> {
+  const res = await drive().files.update({
+    fileId: folderId,
+    // The googleapis types don't allow `null` in appProperties even though
+    // Drive's API uses exactly that to delete a key — cast around the gap.
+    requestBody: { appProperties: { coverId } as unknown as Record<string, string> },
+    fields: "parents",
+    supportsAllDrives: true,
+  });
+  const parent = res.data.parents?.[0];
+  if (parent) listCache.drop(parent);
+}
+
+/** Re-parents a file from one folder to another. Drive calls this add/remove parents, not "move". */
+export async function moveFile(fileId: string, fromParentId: string, toParentId: string): Promise<void> {
+  await drive().files.update({
+    fileId,
+    addParents: toParentId,
+    removeParents: fromParentId,
+    supportsAllDrives: true,
+  });
+}
+
+/**
  * Moves to Drive's own Trash rather than a hard delete — recoverable for
  * Drive's normal retention window if someone taps the wrong tile, at no
  * extra engineering cost. Shows up in the account's Trash exactly like
@@ -320,6 +355,54 @@ export async function listFavorites(root: string): Promise<Entry[]> {
   });
   const entries = await filterToLibrary(res.data.files ?? [], root);
   sortEntries(entries); // no folders in the result, so this just orders by taken-date, newest first
+  return entries;
+}
+
+// Expensive to compute (walks every photo in the account) and only changes
+// once a day, so cache generously — keyed by "MM-DD" in case an instance
+// somehow stays warm across midnight.
+const onThisDayCache = new TTLCache<Entry[]>(6 * 60 * 60_000);
+
+/**
+ * Photos taken on today's month/day in a past year. Drive's query language
+ * can filter on `createdTime` (upload time) but not on EXIF capture time, so
+ * this can't be done as a single scoped query the way search/favourites are
+ * — it pages through every image in the account, decodes each one's EXIF
+ * time (same helper listFolder uses), and keeps only month/day matches
+ * from a year before this one. Fine for a personal library's photo count;
+ * would need rethinking if this library ever reached tens of thousands.
+ */
+export async function onThisDay(root: string): Promise<Entry[]> {
+  const now = new Date();
+  const key = `${now.getMonth()}-${now.getDate()}`;
+  const hit = onThisDayCache.get(key);
+  if (hit) return hit;
+
+  const matches: drive_v3.Schema$File[] = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await drive().files.list({
+      q: `trashed = false and mimeType contains 'image/'`,
+      pageSize: 1000,
+      pageToken,
+      fields: `nextPageToken, files(${MEDIA_FIELDS})`,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    for (const f of res.data.files ?? []) {
+      const iso = exifTimeToIso(f.imageMediaMetadata?.time);
+      if (!iso) continue;
+      const d = new Date(iso);
+      if (d.getMonth() === now.getMonth() && d.getDate() === now.getDate() && d.getFullYear() < now.getFullYear()) {
+        matches.push(f);
+      }
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  const entries = await filterToLibrary(matches, root);
+  entries.sort((a, b) => b.createdTime.localeCompare(a.createdTime)); // most recent past year first
+  onThisDayCache.set(key, entries);
   return entries;
 }
 

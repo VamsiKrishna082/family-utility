@@ -14,6 +14,8 @@ export type Entry = {
   path?: string;
   /** Only set on search results and favourites — needed there (and only there) to invalidate the right folder's cache on delete/rename/unfavourite. */
   parentId?: string;
+  /** Folder-only — id of the photo/video chosen as this folder's cover tile, if one was set. */
+  coverId?: string;
 };
 
 export type Crumb = { id: string; name: string };
