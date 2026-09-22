@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
-import { Lock } from "lucide-react";
 import { auth, signIn } from "@/lib/auth";
+import { DotPortraitCanvas } from "@/components/DotPortraitCanvas";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import styles from "./signin.module.css";
 
 export default async function SignIn({
   searchParams,
@@ -12,43 +14,46 @@ export default async function SignIn({
   const { error } = await searchParams;
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-6">
-      <div className="w-full" style={{ maxWidth: 360 }}>
-        <div
-          className="flex items-center justify-center mb-7"
-          style={{ width: 52, height: 52, borderRadius: 16, background: "#fff", border: "1px solid var(--line)" }}
-        >
-          <Lock size={20} color="var(--amber)" />
+    <div className={styles.page}>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Graduate&family=Hanken+Grotesk:wght@400;500;600&display=swap"
+        rel="stylesheet"
+      />
+      <div className={styles.rib} aria-hidden="true" />
+      <main className={styles.login}>
+        <div className={styles.portrait}>
+          <p className={styles.caption}>18 July 2026</p>
+          <div
+            className={styles.art}
+            role="img"
+            aria-label="Halftone portrait of Vamsi and Varshini in matching jerseys"
+          >
+            <DotPortraitCanvas />
+          </div>
         </div>
 
-        <h1 className="display" style={{ fontSize: 32, lineHeight: 1.15 }}>
-          Two of you live here
-        </h1>
-        <p style={{ color: "var(--dim)", fontSize: 14.5, marginTop: 12, lineHeight: 1.6 }}>
-          The site is public. The door is not. Only the addresses on the list can get in.
-        </p>
+        <section className={styles.panel}>
+          <h1 className={styles.title}>
+            <span>Vamsi</span>
+            <span className={styles.amp}>&amp;</span>
+            <span>Varshini</span>
+          </h1>
+          <p className={styles.lede}>Our photos, money, lists and everything else we share.</p>
 
-        {error && (
-          <p
-            className="mt-5 px-4 py-3"
-            style={{ background: "#f6e8e6", color: "var(--red)", borderRadius: 12, fontSize: 13.5 }}
+          <form
+            action={async () => {
+              "use server";
+              await signIn("google", { redirectTo: "/" });
+            }}
           >
-            That account is not on the list.
-          </p>
-        )}
+            <GoogleSignInButton />
+          </form>
 
-        <form
-          className="mt-7"
-          action={async () => {
-            "use server";
-            await signIn("google", { redirectTo: "/" });
-          }}
-        >
-          <button className="btn btn-dark w-full" style={{ padding: "13px 16px" }} type="submit">
-            Continue with Google
-          </button>
-        </form>
-      </div>
-    </main>
+          {error && <p className={styles.error} role="alert">That account is not on the list.</p>}
+
+          <p className={styles.note}>Only our two Google accounts can sign in.</p>
+        </section>
+      </main>
+    </div>
   );
 }

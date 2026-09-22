@@ -1,0 +1,120 @@
+/* Jersey-themed sign-in: screen-print ink on fabric, tackle-twill headline,
+   a halftone dot portrait animated by DotPortrait (see src/lib/dotPortrait.js).
+   Scoped as a CSS module so none of this leaks into the rest of the app,
+   which otherwise never needs a dark surface or these fonts. */
+
+.page {
+  --fabric: #2e2019;
+  --chalk: #efe4d2;
+  --seat: #3576c4;
+  --clay: #d9735a;
+  --dot: var(--chalk);
+  color-scheme: dark;
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  flex-direction: column;
+  background: var(--fabric);
+  color: var(--chalk);
+  font: 400 1.0625rem/1.55 "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.page * { box-sizing: border-box; }
+
+.rib {
+  flex: none;
+  height: 14px;
+  opacity: 0.9;
+  background:
+    linear-gradient(var(--chalk), var(--chalk)) 0 3px / 100% 2px no-repeat,
+    linear-gradient(var(--chalk), var(--chalk)) 0 8px / 100% 2px no-repeat;
+}
+
+.login {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+}
+
+.portrait {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  padding: clamp(24px, 4vw, 56px) clamp(16px, 3vw, 48px) 0;
+  touch-action: pan-y;
+}
+.art { flex: 1; min-height: 0; }
+.art canvas { display: block; width: 100%; height: 100%; }
+.caption {
+  position: absolute;
+  left: clamp(16px, 3vw, 48px);
+  top: clamp(20px, 3vw, 40px);
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #c9b9a3;
+  letter-spacing: 0.01em;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(28px, 5vw, 72px) clamp(24px, 5vw, 80px);
+  max-width: 34rem;
+}
+.title {
+  margin: 0 0 0.45em;
+  font-family: "Graduate", "Rockwell", "Roboto Slab", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(2.6rem, 5.4vw, 4.6rem);
+  line-height: 0.98;
+  letter-spacing: 0.01em;
+  color: var(--chalk);
+  -webkit-text-stroke: 0.075em var(--seat);
+  paint-order: stroke fill;
+}
+.title span { display: block; }
+.title .amp { font-size: 0.62em; margin: 0.12em 0 0.08em; }
+.lede { margin: 0 0 2rem; color: #c9b9a3; max-width: 26em; }
+
+.google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 22rem;
+  min-height: 3.25rem;
+  padding: 0.75rem 1.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--chalk);
+  color: var(--fabric);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.google:hover { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18), 0 0 0 3px var(--seat); }
+.google:active { transform: translateY(1px); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18); }
+.google:focus-visible { outline: 3px solid var(--seat); outline-offset: 3px; }
+.google[aria-busy="true"] { cursor: progress; opacity: 0.85; }
+.g { width: 20px; height: 20px; flex: none; background: #fff; border-radius: 50%; padding: 2px; }
+
+.note { margin: 1rem 0 0; font-size: 0.875rem; color: #c9b9a3; }
+.error { margin: 1rem 0 0; max-width: 22rem; font-size: 0.9375rem; color: var(--clay); font-weight: 500; }
+
+@media (max-width: 820px) {
+  .login { grid-template-columns: 1fr; }
+  .portrait { height: min(62vh, 520px); padding-top: 44px; }
+  .panel { max-width: none; padding-top: 28px; padding-bottom: 40px; }
+  .google { max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .google { transition: none; }
+}
