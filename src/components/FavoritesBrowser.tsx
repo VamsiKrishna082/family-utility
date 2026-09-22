@@ -7,6 +7,7 @@ import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import type { Entry, FavoritesResponse } from "@/lib/types";
 import { Thumb } from "@/components/Thumb";
 import { Lightbox } from "@/components/Lightbox";
+import { MoveDialog } from "@/components/MoveDialog";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url);
@@ -33,6 +34,12 @@ export function FavoritesBrowser() {
   });
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<Entry | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
 
   const items = data?.results ?? [];
 
@@ -67,6 +74,27 @@ export function FavoritesBrowser() {
     setLightbox(null);
     removeFromList(item.id);
     await patchItem(item.id, item.parentId ?? "", { starred: false });
+  };
+
+  /** Sets item's own parent folder's cover — invisible from here, same as in the main Album grid. */
+  const setCover = async (item: Entry) => {
+    if (!item.parentId) return;
+    await patchItem(item.parentId, item.parentId, { cover: item.id });
+    showToast("Set as folder cover");
+  };
+
+  // Moving doesn't touch the star, so the item stays a favourite and stays in
+  // this list — just re-fetch afterward so its shown path catches up.
+  const moveItem = async (destId: string, destName: string) => {
+    const item = moveTarget;
+    if (!item?.parentId) return;
+    setMoveTarget(null);
+    try {
+      await patchItem(item.id, item.parentId, { moveTo: destId });
+      showToast(`Moved to “${destName}”`);
+    } finally {
+      mutate();
+    }
   };
 
   return (
@@ -107,7 +135,14 @@ export function FavoritesBrowser() {
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
           {items.map((m, i) => (
             <div key={m.id}>
-              <Thumb item={m} onOpen={() => setLightbox(i)} onDelete={() => handleDelete(m)} onToggleFavorite={() => handleUnfavorite(m)} />
+              <Thumb
+                item={m}
+                onOpen={() => setLightbox(i)}
+                onDelete={() => handleDelete(m)}
+                onToggleFavorite={() => handleUnfavorite(m)}
+                onSetCover={() => setCover(m)}
+                onMove={() => setMoveTarget(m)}
+              />
               <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 4 }} className="truncate">{m.path}</p>
             </div>
           ))}
@@ -123,7 +158,24 @@ export function FavoritesBrowser() {
           onDelete={handleDelete}
           onRename={handleRename}
           onToggleFavorite={handleUnfavorite}
+          onMove={(item) => {
+            setLightbox(null);
+            setMoveTarget(item);
+          }}
         />
+      )}
+
+      {moveTarget?.parentId && (
+        <MoveDialog currentFolderId={moveTarget.parentId} onClose={() => setMoveTarget(null)} onConfirm={moveItem} />
+      )}
+
+      {toast && (
+        <div
+          className="card"
+          style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 24, padding: "10px 18px", fontSize: 13.5, zIndex: 60 }}
+        >
+          {toast}
+        </div>
       )}
     </div>
   );

@@ -234,19 +234,39 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
     [data, mutate],
   );
 
+  /**
+   * Handles a move from either the main grid (item has no parentId — it's
+   * implicitly data.folderId) or a search result (item.parentId is set,
+   * since results can come from any folder in the library).
+   */
   const moveItem = useCallback(
     async (item: Entry, destId: string, destName: string) => {
-      if (!data) return;
       setMoveTarget(null);
-      await mutate({ ...data, entries: data.entries.filter((e) => e.id !== item.id) }, false);
+      const source = item.parentId ?? data?.folderId;
+      if (!source) return;
+      if (item.parentId) {
+        setSearchResults((r) => r && r.filter((e) => e.id !== item.id));
+      } else if (data) {
+        await mutate({ ...data, entries: data.entries.filter((e) => e.id !== item.id) }, false);
+      }
       try {
-        await patchItem(item.id, data.folderId, { moveTo: destId });
+        await patchItem(item.id, source, { moveTo: destId });
         showToast(`Moved to “${destName}”`);
       } finally {
-        mutate();
+        if (data && source === data.folderId) mutate();
       }
     },
     [data, mutate, showToast],
+  );
+
+  /** "Set as cover" from a search result targets that item's own parent, not the currently browsed folder. */
+  const searchSetCover = useCallback(
+    async (item: Entry) => {
+      if (!item.parentId) return;
+      await patchItem(item.parentId, item.parentId, { cover: item.id });
+      showToast("Set as folder cover");
+    },
+    [showToast],
   );
 
   const bulkMove = useCallback(
@@ -548,7 +568,13 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
                   {searchMedia.map((m, i) => (
                     <div key={m.id}>
-                      <Thumb item={m} onOpen={() => setSearchLightbox(i)} onToggleFavorite={() => searchToggleFavorite(m)} />
+                      <Thumb
+                        item={m}
+                        onOpen={() => setSearchLightbox(i)}
+                        onToggleFavorite={() => searchToggleFavorite(m)}
+                        onSetCover={() => searchSetCover(m)}
+                        onMove={() => setMoveTarget(m)}
+                      />
                       <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 4 }} className="truncate">{m.path}</p>
                     </div>
                   ))}
@@ -611,6 +637,14 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
               <span style={{ fontSize: 13.5, color: "var(--dim)" }}>
                 {selectedIds.size === 0 ? "Tap photos to select them" : `${selectedIds.size} selected`}
               </span>
+              <button
+                className="btn btn-plain"
+                style={{ padding: "6px 12px", fontSize: 13 }}
+                onClick={() => setSelectedIds(selectedIds.size === media.length ? new Set() : new Set(media.map((m) => m.id)))}
+                disabled={media.length === 0}
+              >
+                {selectedIds.size === media.length && media.length > 0 ? "Select none" : "Select all"}
+              </button>
               <div className="flex gap-2" style={{ marginLeft: "auto" }}>
                 <button className="btn btn-plain" style={{ padding: "6px 12px", fontSize: 13 }} onClick={exitSelectMode}>Cancel</button>
                 <button
@@ -831,12 +865,16 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           onDelete={searchDelete}
           onRename={searchRename}
           onToggleFavorite={searchToggleFavorite}
+          onMove={(item) => {
+            setSearchLightbox(null);
+            setMoveTarget(item);
+          }}
         />
       )}
 
-      {moveTarget && data && (
+      {moveTarget && (moveTarget.parentId ?? data?.folderId) && (
         <MoveDialog
-          currentFolderId={data.folderId}
+          currentFolderId={(moveTarget.parentId ?? data?.folderId)!}
           onClose={() => setMoveTarget(null)}
           onConfirm={(destId, destName) => moveItem(moveTarget, destId, destName)}
         />

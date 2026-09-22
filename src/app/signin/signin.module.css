@@ -1,10 +1,15 @@
-/* Jersey-themed sign-in: screen-print ink on fabric, tackle-twill headline,
-   a halftone dot portrait animated by DotPortrait (see src/lib/dotPortrait.js).
-   Scoped as a CSS module so none of this leaks into the rest of the app,
-   which otherwise never needs a dark surface or these fonts. */
+/* The dot portrait's data was baked for light ink on a dark background —
+   bigger dot = brighter pixel, with pure-black pixels (hair, shadow, and
+   everywhere outside the person) all collapsed to "no dot" during
+   generation. That last part means it can only ever render correctly on a
+   dark surface: flip to light and every one of those true-black spots reads
+   as a hole instead of ink, since the data no longer distinguishes "shadow"
+   from "background". So: dark background, kept — just a lighter, warmer
+   brown than the original near-black, rather than matching the rest of the
+   app's light paper. Scoped as a CSS module so this doesn't leak out. */
 
 .page {
-  --fabric: #2e2019;
+  --fabric: #4a3327;
   --chalk: #efe4d2;
   --seat: #3576c4;
   --clay: #d9735a;
