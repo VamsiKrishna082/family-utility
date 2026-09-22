@@ -162,7 +162,9 @@ Sign in, click Album, create a folder, drag in a photo. It should appear within 
 
 ## Deploy to Cloud Run
 
-**Current deployment:** project `household-509314`, region `asia-south1`, service
+**Current deployment:** project `household-509314`, region `asia-southeast1` (Singapore
+— chosen specifically because it's one of the few regions where Cloud Run supports
+custom domain mapping; `asia-south1` does not, which is why this moved), service
 `household`, running as the dedicated `household-app` service account (Secret Manager
 access to the three secrets below, object-admin on nothing else — Drive access comes
 from `DRIVE_REFRESH_TOKEN`, not the GCP service identity). Once your env is set up
@@ -172,7 +174,7 @@ from `DRIVE_REFRESH_TOKEN`, not the GCP service identity). Once your env is set 
 npm run deploy
 ```
 
-That's `gcloud run deploy household --source . --project=household-509314 --region=asia-south1`
+That's `gcloud run deploy household --source . --project=household-509314 --region=asia-southeast1`
 under the hood — env vars, secrets, and the service account all carry over from the
 previous revision automatically; you only need to touch the flags below if you're
 bootstrapping a **new** project from scratch or rotating a secret.
@@ -181,7 +183,7 @@ bootstrapping a **new** project from scratch or rotating a secret.
 
 ```bash
 PROJECT=your-project-id
-REGION=asia-south1
+REGION=asia-southeast1   # must be a domain-mapping-capable region if you plan to use a custom domain — see https://docs.cloud.google.com/run/docs/mapping-custom-domains
 
 gcloud services enable run.googleapis.com drive.googleapis.com secretmanager.googleapis.com
 
