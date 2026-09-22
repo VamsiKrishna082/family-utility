@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { X, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, ChevronLeft, ChevronRight, Download, Trash2 } from "lucide-react";
 import type { Entry } from "@/lib/types";
 
 export function Lightbox({
@@ -9,12 +9,15 @@ export function Lightbox({
   index,
   onClose,
   onIndex,
+  onDelete,
 }: {
   items: Entry[];
   index: number;
   onClose: () => void;
   onIndex: (i: number) => void;
+  onDelete?: (item: Entry) => void | Promise<void>;
 }) {
+  const [deleting, setDeleting] = useState(false);
   const item = items[index];
 
   useEffect(() => {
@@ -44,6 +47,18 @@ export function Lightbox({
           <a href={`/api/stream/${item.id}`} download={item.name} aria-label="Download">
             <Download size={19} color="#fff" />
           </a>
+          {onDelete && (
+            <button
+              onClick={async () => {
+                setDeleting(true);
+                await onDelete(item);
+              }}
+              disabled={deleting}
+              aria-label="Delete"
+            >
+              <Trash2 size={19} color="#fff" style={{ opacity: deleting ? 0.5 : 1 }} />
+            </button>
+          )}
         </div>
       </div>
 

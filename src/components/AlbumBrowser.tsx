@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ChevronLeft, Folder, FolderPlus, Upload, Loader2 } from "lucide-react";
+import { ChevronLeft, Folder, FolderPlus, Upload, Loader2, RefreshCw } from "lucide-react";
 import type { BrowseResponse, Entry } from "@/lib/types";
 import { uploadOne, type UploadProgress } from "@/lib/upload";
 import { Thumb } from "@/components/Thumb";
@@ -31,6 +31,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const folders = useMemo(() => data?.entries.filter((e) => e.kind === "folder") ?? [], [data]);
   const media = useMemo(() => data?.entries.filter((e) => e.kind !== "folder") ?? [], [data]);
@@ -87,6 +88,37 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
 
   const openAt = (item: Entry) => setLightbox(media.findIndex((m) => m.id === item.id));
 
+  /** Trashes in Drive (recoverable there), removing the tile immediately rather than waiting on SWR's revalidation. */
+  const handleDelete = useCallback(
+    async (item: Entry) => {
+      if (!data) return;
+      const target = data.folderId;
+      await mutate({ ...data, entries: data.entries.filter((e) => e.id !== item.id) }, false);
+      try {
+        await fetch(`/api/media/${item.id}?folder=${target}`, { method: "DELETE" });
+      } finally {
+        mutate();
+      }
+    },
+    [data, mutate],
+  );
+
+  const deleteFromLightbox = async (item: Entry) => {
+    setLightbox(null); // back to the grid — simplest correct behavior, no index juggling
+    await handleDelete(item);
+  };
+
+  /** Bypasses the 60s cache so a file added directly in Drive (not through this app) shows up right away. */
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetcher(`/api/browse?folder=${folderId ?? "root"}&refresh=1`);
+      await mutate(res, false);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div
       onDragOver={(e) => {
@@ -127,6 +159,9 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
         </div>
 
         <div className="flex gap-2 shrink-0">
+          <button className="btn btn-plain flex items-center justify-center" onClick={refresh} disabled={refreshing} aria-label="Refresh" title="Check Drive for anything added outside the app">
+            <RefreshCw size={16} className={refreshing ? "spin" : ""} />
+          </button>
           <button className="btn btn-plain flex items-center gap-2" onClick={() => setCreating((v) => !v)}>
             <FolderPlus size={16} /> <span className="hidden sm:inline">New folder</span>
           </button>
@@ -222,13 +257,13 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
       ) : (
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
           {media.map((m) => (
-            <Thumb key={m.id} item={m} onOpen={() => openAt(m)} />
+            <Thumb key={m.id} item={m} onOpen={() => openAt(m)} onDelete={() => handleDelete(m)} />
           ))}
         </div>
       )}
 
       {lightbox !== null && lightbox >= 0 && (
-        <Lightbox items={media} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} />
+        <Lightbox items={media} index={lightbox} onIndex={setLightbox} onClose={() => setLightbox(null)} onDelete={deleteFromLightbox} />
       )}
     </div>
   );

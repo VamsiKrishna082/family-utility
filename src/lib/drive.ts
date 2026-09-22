@@ -192,6 +192,20 @@ export function invalidate(folderId: string) {
   listCache.drop(folderId);
 }
 
+/**
+ * Moves to Drive's own Trash rather than a hard delete — recoverable for
+ * Drive's normal retention window if someone taps the wrong tile, at no
+ * extra engineering cost. Shows up in the account's Trash exactly like
+ * deleting it by hand there would.
+ */
+export async function trashFile(fileId: string): Promise<void> {
+  await drive().files.update({
+    fileId,
+    requestBody: { trashed: true },
+    supportsAllDrives: true,
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Thumbnails                                                          */
 /* ------------------------------------------------------------------ */

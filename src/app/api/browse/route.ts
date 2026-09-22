@@ -14,11 +14,13 @@ export async function GET(req: Request) {
   try {
     await requireUser();
 
-    const asked = new URL(req.url).searchParams.get("folder");
+    const url = new URL(req.url);
+    const asked = url.searchParams.get("folder");
     const folderId = asked && asked !== "root" ? asked : rootId();
+    const skipCache = url.searchParams.get("refresh") === "1";
 
     // breadcrumbs() also proves the folder sits inside the library, so it must run first.
-    const [crumbs, entries] = await Promise.all([breadcrumbs(folderId, rootId()), listFolder(folderId)]);
+    const [crumbs, entries] = await Promise.all([breadcrumbs(folderId, rootId()), listFolder(folderId, skipCache)]);
 
     const body: BrowseResponse = { folderId, crumbs, entries };
     return ok(body);
