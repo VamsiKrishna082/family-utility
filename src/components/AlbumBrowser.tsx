@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import {
   ChevronLeft, Folder, FolderPlus, Upload, Loader2, RefreshCw,
-  Search, X, Camera, CheckSquare, Trash2, Pencil,
+  Search, X, CheckSquare, Trash2, Pencil, Star,
 } from "lucide-react";
 import type { BrowseResponse, Entry, SearchResponse } from "@/lib/types";
 import { uploadOne, type UploadProgress } from "@/lib/upload";
@@ -28,7 +28,6 @@ async function patchItem(id: string, folder: string, body: Record<string, unknow
 
 export function AlbumBrowser({ folderId }: { folderId: string | null }) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const cameraInput = useRef<HTMLInputElement>(null);
   const key = `/api/browse?folder=${folderId ?? "root"}`;
 
   // One request for breadcrumbs, folders and media. Keeps the previous folder on
@@ -116,10 +115,19 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
 
   const openAt = (item: Entry) => setLightbox(media.findIndex((m) => m.id === item.id));
 
-  /** Trashes in Drive (recoverable there), removing the tile immediately rather than waiting on SWR's revalidation. */
+  /**
+   * Trashes in Drive (recoverable there), removing the tile immediately rather
+   * than waiting on SWR's revalidation. Works on folders too — Drive treats
+   * delete identically for files and folders, and trashing a folder cascades
+   * to everything inside it, so this doubles as "delete folder and contents".
+   * A folder delete confirms first since the blast radius isn't obvious from a tap.
+   */
   const handleDelete = useCallback(
     async (item: Entry) => {
       if (!data) return;
+      if (item.kind === "folder" && !window.confirm(`Delete "${item.name}" and everything inside it?\n\nIt goes to Drive's Trash, not gone for good.`)) {
+        return;
+      }
       const target = data.folderId;
       await mutate({ ...data, entries: data.entries.filter((e) => e.id !== item.id) }, false);
       try {
@@ -135,6 +143,21 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
     setLightbox(null); // back to the grid — simplest correct behavior, no index juggling
     await handleDelete(item);
   };
+
+  /** Drive's own star, not a move — the file stays exactly where it is, just also appears under Favourites. */
+  const toggleFavorite = useCallback(
+    async (item: Entry) => {
+      if (!data) return;
+      const starred = !item.starred;
+      await mutate({ ...data, entries: data.entries.map((e) => (e.id === item.id ? { ...e, starred } : e)) }, false);
+      try {
+        await patchItem(item.id, data.folderId, { starred });
+      } finally {
+        mutate();
+      }
+    },
+    [data, mutate],
+  );
 
   const renameFromLightbox = useCallback(
     async (item: Entry, name: string) => {
@@ -245,6 +268,13 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
     if (data && item.parentId === data.folderId) mutate();
   };
 
+  const searchToggleFavorite = async (item: Entry) => {
+    const starred = !item.starred;
+    setSearchResults((r) => r && r.map((e) => (e.id === item.id ? { ...e, starred } : e)));
+    await patchItem(item.id, item.parentId ?? "", { starred });
+    if (data && item.parentId === data.folderId) mutate();
+  };
+
   const closeSearch = () => {
     setSearchOpen(false);
     setQuery("");
@@ -322,9 +352,6 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           <button className="btn btn-plain flex items-center gap-2" onClick={() => setCreating((v) => !v)}>
             <FolderPlus size={16} /> <span className="hidden sm:inline">New folder</span>
           </button>
-          <button className="btn btn-plain flex items-center justify-center" onClick={() => cameraInput.current?.click()} aria-label="Take photo">
-            <Camera size={16} />
-          </button>
           <button className="btn btn-dark flex items-center gap-2" onClick={() => fileInput.current?.click()}>
             <Upload size={16} /> <span className="hidden sm:inline">Upload</span>
           </button>
@@ -333,17 +360,6 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
             type="file"
             multiple
             accept="image/*,video/*"
-            hidden
-            onChange={(e) => {
-              handleFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <input
-            ref={cameraInput}
-            type="file"
-            accept="image/*,video/*"
-            capture="environment"
             hidden
             onChange={(e) => {
               handleFiles(e.target.files);
@@ -395,7 +411,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
                   {searchMedia.map((m, i) => (
                     <div key={m.id}>
-                      <Thumb item={m} onOpen={() => setSearchLightbox(i)} />
+                      <Thumb item={m} onOpen={() => setSearchLightbox(i)} onToggleFavorite={() => searchToggleFavorite(m)} />
                       <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 4 }} className="truncate">{m.path}</p>
                     </div>
                   ))}
@@ -472,6 +488,15 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
             </div>
           )}
 
+          {crumbs.length === 0 && (
+            <div className="mb-8" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }}>
+              <Link href="/album/favorites" className="card" style={{ padding: 18, display: "block" }}>
+                <Star size={19} color="#c78a1e" fill="#ffc84a" strokeWidth={1.5} />
+                <p style={{ fontSize: 15, marginTop: 14 }}>Favourites</p>
+              </Link>
+            </div>
+          )}
+
           {folders.length > 0 && (
             <div
               className="mb-8"
@@ -498,7 +523,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                   <div key={f.id} className="group relative">
                     <Link href={`/album?folder=${f.id}`} className="card" style={{ padding: 18, display: "block" }}>
                       <Folder size={19} color="#3e6b85" strokeWidth={1.8} />
-                      <p style={{ fontSize: 15, marginTop: 14 }} className="truncate pr-5">{f.name}</p>
+                      <p style={{ fontSize: 15, marginTop: 14 }} className="truncate pr-9">{f.name}</p>
                     </Link>
                     <button
                       onClick={(e) => {
@@ -510,6 +535,17 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                       style={{ top: 14, right: 14, width: 24, height: 24, borderRadius: 7, background: "var(--line2)", transition: "opacity .15s ease" }}
                     >
                       <Pencil size={12} color="var(--dim)" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleDelete(f);
+                      }}
+                      aria-label="Delete folder"
+                      className="absolute opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                      style={{ top: 14, right: 44, width: 24, height: 24, borderRadius: 7, background: "var(--line2)", transition: "opacity .15s ease" }}
+                    >
+                      <Trash2 size={12} color="var(--red)" />
                     </button>
                   </div>
                 ),
@@ -536,6 +572,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                   item={m}
                   onOpen={() => openAt(m)}
                   onDelete={() => handleDelete(m)}
+                  onToggleFavorite={() => toggleFavorite(m)}
                   selectMode={selectMode}
                   selected={selectedIds.has(m.id)}
                   onToggleSelect={() => toggleSelect(m.id)}
@@ -554,6 +591,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           onClose={() => setLightbox(null)}
           onDelete={deleteFromLightbox}
           onRename={renameFromLightbox}
+          onToggleFavorite={toggleFavorite}
         />
       )}
 
@@ -565,6 +603,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           onClose={() => setSearchLightbox(null)}
           onDelete={searchDelete}
           onRename={searchRename}
+          onToggleFavorite={searchToggleFavorite}
         />
       )}
     </div>

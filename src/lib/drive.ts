@@ -41,7 +41,7 @@ export function docsRootId(): string {
 /* Caches                                                              */
 /* ------------------------------------------------------------------ */
 const listCache  = new TTLCache<Entry[]>(60_000);
-const nodeCache  = new TTLCache<{ name: string; parent: string | null }>(30 * 60_000);
+const nodeCache  = new TTLCache<{ name: string; parent: string | null; trashed: boolean }>(30 * 60_000);
 // Thumbnail links from Drive are stable for ~1 hour. Caching them means repeat
 // loads (second user opening the same album) skip the metadata round trip entirely.
 const thumbCache = new TTLCache<string>(50 * 60_000);
@@ -79,8 +79,13 @@ function toEntry(f: drive_v3.Schema$File): Entry {
     // both sorting and the date shown in the lightbox use.
     createdTime: exifTimeToIso(img?.time) ?? f.createdTime ?? new Date(0).toISOString(),
     hasThumb: isFolder ? false : Boolean(f.thumbnailLink),
+    starred: Boolean(f.starred),
   };
 }
+
+const MEDIA_FIELDS =
+  "id,name,mimeType,createdTime,thumbnailLink,parents,starred," +
+  "imageMediaMetadata(width,height,time),videoMediaMetadata(width,height,durationMillis)";
 
 /**
  * One Drive call returns the subfolders AND the media for a folder.
@@ -103,9 +108,7 @@ export async function listFolder(folderId: string, skipCache = false): Promise<E
       orderBy: "folder",
       pageSize: 200,
       pageToken,
-      fields:
-        "nextPageToken, files(id,name,mimeType,createdTime,thumbnailLink," +
-        "imageMediaMetadata(width,height,time),videoMediaMetadata(width,height,durationMillis))",
+      fields: `nextPageToken, files(${MEDIA_FIELDS})`,
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });
@@ -114,7 +117,8 @@ export async function listFolder(folderId: string, skipCache = false): Promise<E
       if (!f.id) continue;
       entries.push(toEntry(f));
       if (f.mimeType === FOLDER_MIME) {
-        nodeCache.set(f.id, { name: f.name ?? "Untitled", parent: folderId });
+        // Came from a trashed=false query, so trashed is known-false here.
+        nodeCache.set(f.id, { name: f.name ?? "Untitled", parent: folderId, trashed: false });
       }
     }
     pageToken = res.data.nextPageToken ?? undefined;
@@ -135,16 +139,16 @@ function sortEntries(entries: Entry[]): void {
   });
 }
 
-async function node(id: string): Promise<{ name: string; parent: string | null }> {
+async function node(id: string): Promise<{ name: string; parent: string | null; trashed: boolean }> {
   const hit = nodeCache.get(id);
   if (hit) return hit;
 
   const res = await drive().files.get({
     fileId: id,
-    fields: "id,name,parents",
+    fields: "id,name,parents,trashed",
     supportsAllDrives: true,
   });
-  const value = { name: res.data.name ?? "Untitled", parent: res.data.parents?.[0] ?? null };
+  const value = { name: res.data.name ?? "Untitled", parent: res.data.parents?.[0] ?? null, trashed: Boolean(res.data.trashed) };
   nodeCache.set(id, value);
   return value;
 }
@@ -154,6 +158,15 @@ async function node(id: string): Promise<{ name: string; parent: string | null }
  * ID that does not descend from that root is rejected, so nobody can browse
  * the rest of the owner's Drive by guessing IDs. Album and Documents each
  * pass their own root — two separate trees, one Drive account.
+ *
+ * Also rejects if the folder itself or any ancestor is trashed. Drive does
+ * NOT cascade the `trashed` flag to a folder's contents when the folder is
+ * trashed (verified directly against the API) — only the folder object
+ * itself flips to trashed=true, its children keep trashed=false. Without
+ * this check, a deleted folder's contents would still resolve here: still
+ * browsable by a stale direct link, and still surfaced by search/favourites
+ * (both of which query the whole account and rely on this function as their
+ * only "is this actually still in the library" gate).
  */
 export async function breadcrumbs(folderId: string, root: string): Promise<Crumb[]> {
   if (folderId === root) return [];
@@ -163,7 +176,8 @@ export async function breadcrumbs(folderId: string, root: string): Promise<Crumb
 
   for (let depth = 0; cursor && depth < 20; depth++) {
     if (cursor === root) return trail;
-    const n: { name: string; parent: string | null } = await node(cursor);
+    const n = await node(cursor);
+    if (n.trashed) throw new Error("That folder has been deleted");
     trail.unshift({ id: cursor, name: n.name });
     cursor = n.parent;
   }
@@ -220,6 +234,11 @@ export async function renameFile(fileId: string, name: string): Promise<void> {
   nodeCache.drop(fileId); // breadcrumbs() would otherwise keep showing the old name
 }
 
+/** Drive's own star — the same one its own UI shows. Reused here as "favourite" instead of inventing new storage. */
+export async function setStarred(fileId: string, starred: boolean): Promise<void> {
+  await drive().files.update({ fileId, requestBody: { starred }, supportsAllDrives: true });
+}
+
 /**
  * Moves to Drive's own Trash rather than a hard delete — recoverable for
  * Drive's normal retention window if someone taps the wrong tile, at no
@@ -232,31 +251,22 @@ export async function trashFile(fileId: string): Promise<void> {
     requestBody: { trashed: true },
     supportsAllDrives: true,
   });
+  // Only matters when fileId is a folder (nodeCache only ever holds folder
+  // nodes), so breadcrumbs()'s trashed check sees it immediately instead of
+  // trusting a stale cached "not trashed" for up to nodeCache's 30 min TTL.
+  nodeCache.drop(fileId);
 }
 
 /**
- * Drive has no "search this folder and everything under it" query — `in
- * parents` only checks the direct parent. And since this account's OAuth
- * token now has full `drive` scope (not drive.file), an unscoped name search
- * would also surface files completely outside the library. So: search Drive
- * broadly, then keep only results that actually descend from `root`,
- * re-using breadcrumbs()'s existing walk-up-to-root check for that. Capped
- * at 25 matches so a common word doesn't turn into dozens of ancestry walks.
+ * Shared by search and favourites: both run a Drive query with no folder
+ * scope (name search and `starred = true` are both global to the account),
+ * so both need the same "keep only results that actually descend from root"
+ * pass — re-using breadcrumbs()'s walk-up-to-root check for that — plus the
+ * same path-labeling so results make sense outside their normal listing.
  */
-export async function searchLibrary(term: string, root: string): Promise<Entry[]> {
-  const escaped = term.replace(/'/g, "\\'");
-  const res = await drive().files.list({
-    q: `name contains '${escaped}' and trashed = false`,
-    pageSize: 25,
-    fields:
-      "files(id,name,mimeType,createdTime,thumbnailLink,parents," +
-      "imageMediaMetadata(width,height,time),videoMediaMetadata(width,height,durationMillis))",
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
-
+async function filterToLibrary(files: drive_v3.Schema$File[], root: string): Promise<Entry[]> {
   const matches: Entry[] = [];
-  for (const f of res.data.files ?? []) {
+  for (const f of files) {
     if (!f.id) continue;
     const parent = f.parents?.[0];
     if (!parent) continue;
@@ -273,6 +283,44 @@ export async function searchLibrary(term: string, root: string): Promise<Entry[]
     }
   }
   return matches;
+}
+
+/**
+ * Drive has no "search this folder and everything under it" query — `in
+ * parents` only checks the direct parent. And since this account's OAuth
+ * token now has full `drive` scope (not drive.file), an unscoped name search
+ * would also surface files completely outside the library. So: search Drive
+ * broadly, then filter to the library with filterToLibrary(). Capped at 25
+ * matches so a common word doesn't turn into dozens of ancestry walks.
+ */
+export async function searchLibrary(term: string, root: string): Promise<Entry[]> {
+  const escaped = term.replace(/'/g, "\\'");
+  const res = await drive().files.list({
+    q: `name contains '${escaped}' and trashed = false`,
+    pageSize: 25,
+    fields: `files(${MEDIA_FIELDS})`,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  return filterToLibrary(res.data.files ?? [], root);
+}
+
+/**
+ * Same shape of problem as search: `starred = true` is account-wide, not
+ * scoped to a folder, so results are filtered down to this library the same
+ * way. Folders excluded — favouriting is a media-item concept here.
+ */
+export async function listFavorites(root: string): Promise<Entry[]> {
+  const res = await drive().files.list({
+    q: `starred = true and trashed = false and mimeType != '${FOLDER_MIME}'`,
+    pageSize: 200,
+    fields: `files(${MEDIA_FIELDS})`,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const entries = await filterToLibrary(res.data.files ?? [], root);
+  sortEntries(entries); // no folders in the result, so this just orders by taken-date, newest first
+  return entries;
 }
 
 /* ------------------------------------------------------------------ */

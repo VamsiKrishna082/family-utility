@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, Trash2, Check } from "lucide-react";
+import { Play, Trash2, Check, Star } from "lucide-react";
 import type { Entry } from "@/lib/types";
 
 /**
@@ -12,6 +12,7 @@ export function Thumb({
   item,
   onOpen,
   onDelete,
+  onToggleFavorite,
   selectMode,
   selected,
   onToggleSelect,
@@ -19,6 +20,7 @@ export function Thumb({
   item: Entry;
   onOpen: () => void;
   onDelete?: () => void;
+  onToggleFavorite?: () => void;
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
@@ -104,6 +106,23 @@ export function Thumb({
           }}
         >
           <Trash2 size={13} color="#fff" strokeWidth={1.8} />
+        </button>
+      )}
+
+      {onToggleFavorite && !selectMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          aria-label={item.starred ? "Remove from favourites" : "Add to favourites"}
+          className={`absolute flex items-center justify-center ${item.starred ? "" : "opacity-0 group-hover:opacity-100"}`}
+          style={{
+            bottom: 8, right: 8, width: 28, height: 28, borderRadius: 8,
+            background: "rgba(10,8,16,.55)", transition: "opacity .15s ease",
+          }}
+        >
+          <Star size={13} color="#fff" fill={item.starred ? "#ffc84a" : "none"} stroke={item.starred ? "#ffc84a" : "#fff"} strokeWidth={1.8} />
         </button>
       )}
     </div>

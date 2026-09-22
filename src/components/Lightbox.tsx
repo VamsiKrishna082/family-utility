@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Trash2, Pencil } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Download, Trash2, Pencil, Star } from "lucide-react";
 import type { Entry } from "@/lib/types";
 
 export function Lightbox({
@@ -11,6 +11,7 @@ export function Lightbox({
   onIndex,
   onDelete,
   onRename,
+  onToggleFavorite,
 }: {
   items: Entry[];
   index: number;
@@ -18,6 +19,7 @@ export function Lightbox({
   onIndex: (i: number) => void;
   onDelete?: (item: Entry) => void | Promise<void>;
   onRename?: (item: Entry, name: string) => void | Promise<void>;
+  onToggleFavorite?: (item: Entry) => void | Promise<void>;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -66,6 +68,11 @@ export function Lightbox({
           <a href={`/api/stream/${item.id}`} download={item.name} aria-label="Download">
             <Download size={19} color="#fff" />
           </a>
+          {onToggleFavorite && (
+            <button onClick={() => onToggleFavorite(item)} aria-label={item.starred ? "Remove from favourites" : "Add to favourites"}>
+              <Star size={19} fill={item.starred ? "#ffc84a" : "none"} stroke={item.starred ? "#ffc84a" : "#fff"} strokeWidth={1.8} />
+            </button>
+          )}
           {onDelete && (
             <button
               onClick={async () => {

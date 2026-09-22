@@ -55,26 +55,45 @@ Browser
   ├─ Video
   │    └─ GET /api/stream/[id]       → proxies Drive with Range support so seek works
   │
-  ├─ Delete / rename
+  ├─ Delete / rename / favourite
   │    └─ DELETE or PATCH /api/media/[id]?folder=X
-  │         delete trashes in Drive (recoverable there, not a hard delete);
-  │         rename works on files and folders identically
+  │         delete trashes in Drive (recoverable there, not a hard delete) —
+  │         works on a folder too, and cascades to its contents in Drive;
+  │         rename works on files and folders identically;
+  │         PATCH {starred} toggles Drive's own star, reused as "favourite"
   │
   ├─ Bulk delete
   │    └─ POST /api/media/bulk-delete  {ids, folder} → one round trip for N deletes
   │
-  └─ Search
-       └─ GET /api/search?q=X        → whole-library name search, not just the current folder
-            Drive's `in parents` only checks the direct parent, so this queries
-            broadly then keeps only results descending from the root (reusing
-            breadcrumbs()'s ancestry walk), capped at 25 matches
+  ├─ Search
+  │    └─ GET /api/search?q=X        → whole-library name search, not just the current folder
+  │         Drive's `in parents` only checks the direct parent, so this queries
+  │         broadly then keeps only results descending from the root (reusing
+  │         breadcrumbs()'s ancestry walk), capped at 25 matches
+  │
+  └─ Favourites
+       └─ GET /api/favorites          → every starred item in the library, any folder
+            Same broad-query-then-filter pattern as search, but `starred = true`
+            instead of a name match — see filterToLibrary() in src/lib/drive.ts
 ```
 
 **Album extras:** sorted by actual photo-taken date (EXIF `imageMediaMetadata.time`
 when Drive has it, not upload time — `orderBy` can't sort by EXIF server-side, so this
-is a client-side sort in `listFolder()`), a camera-capture upload button on top of the
-regular gallery-picker upload, multi-select for bulk delete, and a photo/video count
-next to the folder subtitle (computed from data already fetched, no extra call).
+is a client-side sort in `listFolder()`), multi-select for bulk delete, folder delete
+(with a confirm prompt — it takes everything inside), a favourites collection (Drive's
+native star, not a moved/duplicated file — hover any tile for the star toggle, or find
+it all in one place from the Favourites tile on the Album home screen), and a
+photo/video count next to the folder subtitle (computed from data already fetched, no
+extra call).
+
+**Gotcha (fixed 2026-09-22):** trashing a folder in Drive does **not** cascade the
+`trashed` flag to its contents — only the folder object itself flips to `trashed:
+true`; children keep `trashed: false` (verified directly against the API). Search and
+Favourites both run an account-wide query filtered only by `trashed = false` on the
+item itself, so without a fix a file orphaned by a folder delete would still surface in
+both. Fixed by having `breadcrumbs()` — the shared gate `/api/browse`, search, and
+favourites all rely on to confirm something is still really in the library — also
+reject if the folder itself or any ancestor along the walk to root is trashed.
 
 **Stack:** Next.js 15 · React 19 · TypeScript · Auth.js v5 · SWR · Tailwind v4
 

@@ -8,9 +8,11 @@ export type Entry = {
   /** EXIF capture time when Drive has it (photos only), else Drive's own createdTime. Despite the name, this is "best known date", used for both display and sort order. */
   createdTime: string;
   hasThumb: boolean;
-  /** Only set on search results — the folder path leading to this item, for context outside its normal listing. */
+  /** Drive's own star, reused as this app's "favourite" — same flag Drive's own UI shows. */
+  starred: boolean;
+  /** Only set on search results and favourites — the folder path leading to this item, for context outside its normal listing. */
   path?: string;
-  /** Only set on search results — needed there (and only there) to invalidate the right folder's cache on delete/rename. */
+  /** Only set on search results and favourites — needed there (and only there) to invalidate the right folder's cache on delete/rename/unfavourite. */
   parentId?: string;
 };
 
@@ -24,6 +26,10 @@ export type BrowseResponse = {
 
 export type SearchResponse = {
   query: string;
+  results: Entry[];
+};
+
+export type FavoritesResponse = {
   results: Entry[];
 };
 
