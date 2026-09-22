@@ -52,9 +52,29 @@ Browser
   │         thumbnailLink cached 50 min in-process (skips the metadata call)
   │         browser caches the image forever (immutable header)
   │
-  └─ Video
-       └─ GET /api/stream/[id]       → proxies Drive with Range support so seek works
+  ├─ Video
+  │    └─ GET /api/stream/[id]       → proxies Drive with Range support so seek works
+  │
+  ├─ Delete / rename
+  │    └─ DELETE or PATCH /api/media/[id]?folder=X
+  │         delete trashes in Drive (recoverable there, not a hard delete);
+  │         rename works on files and folders identically
+  │
+  ├─ Bulk delete
+  │    └─ POST /api/media/bulk-delete  {ids, folder} → one round trip for N deletes
+  │
+  └─ Search
+       └─ GET /api/search?q=X        → whole-library name search, not just the current folder
+            Drive's `in parents` only checks the direct parent, so this queries
+            broadly then keeps only results descending from the root (reusing
+            breadcrumbs()'s ancestry walk), capped at 25 matches
 ```
+
+**Album extras:** sorted by actual photo-taken date (EXIF `imageMediaMetadata.time`
+when Drive has it, not upload time — `orderBy` can't sort by EXIF server-side, so this
+is a client-side sort in `listFolder()`), a camera-capture upload button on top of the
+regular gallery-picker upload, multi-select for bulk delete, and a photo/video count
+next to the folder subtitle (computed from data already fetched, no extra call).
 
 **Stack:** Next.js 15 · React 19 · TypeScript · Auth.js v5 · SWR · Tailwind v4
 
