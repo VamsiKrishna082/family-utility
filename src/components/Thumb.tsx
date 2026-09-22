@@ -1,14 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, Trash2 } from "lucide-react";
+import { Play, Trash2, Check } from "lucide-react";
 import type { Entry } from "@/lib/types";
 
 /**
  * Drive needs a few seconds to render a thumbnail for a freshly uploaded file.
  * The proxy answers 202 until then, so we retry with backoff instead of showing a broken tile.
  */
-export function Thumb({ item, onOpen, onDelete }: { item: Entry; onOpen: () => void; onDelete?: () => void }) {
+export function Thumb({
+  item,
+  onOpen,
+  onDelete,
+  selectMode,
+  selected,
+  onToggleSelect,
+}: {
+  item: Entry;
+  onOpen: () => void;
+  onDelete?: () => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}) {
   const [loaded, setLoaded] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [gaveUp, setGaveUp] = useState(false);
@@ -26,7 +40,11 @@ export function Thumb({ item, onOpen, onDelete }: { item: Entry; onOpen: () => v
 
   return (
     <div className="group relative w-full overflow-hidden" style={{ borderRadius: 14, background: "var(--line2)", aspectRatio: "4 / 3" }}>
-      <button onClick={onOpen} className="absolute inset-0 w-full h-full">
+      <button
+        onClick={selectMode ? onToggleSelect : onOpen}
+        className="absolute inset-0 w-full h-full"
+        style={selected ? { outline: "2.5px solid var(--indigo)", outlineOffset: -2.5, borderRadius: 14 } : undefined}
+      >
         <img
           src={src}
           alt={item.name}
@@ -57,9 +75,22 @@ export function Thumb({ item, onOpen, onDelete }: { item: Entry; onOpen: () => v
             {item.durationLabel ?? "video"}
           </span>
         )}
+
+        {selectMode && (
+          <span
+            className="absolute flex items-center justify-center"
+            style={{
+              top: 8, left: 8, width: 22, height: 22, borderRadius: 999,
+              background: selected ? "var(--indigo)" : "rgba(255,255,255,.85)",
+              border: selected ? "none" : "1.5px solid rgba(0,0,0,.2)",
+            }}
+          >
+            {selected && <Check size={13} color="#fff" strokeWidth={2.5} />}
+          </span>
+        )}
       </button>
 
-      {onDelete && (
+      {onDelete && !selectMode && (
         <button
           onClick={(e) => {
             e.stopPropagation();

@@ -56,6 +56,13 @@ function durationLabel(ms?: string | null): string | null {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** Drive returns EXIF capture time as "2015:07:13 07:30:38" — not ISO. Normalize so it sorts and parses like one. */
+function exifTimeToIso(raw?: string | null): string | null {
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})$/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}` : null;
+}
+
 function toEntry(f: drive_v3.Schema$File): Entry {
   const isFolder = f.mimeType === FOLDER_MIME;
   const img = f.imageMediaMetadata;
@@ -67,7 +74,10 @@ function toEntry(f: drive_v3.Schema$File): Entry {
     width: img?.width ?? vid?.width ?? null,
     height: img?.height ?? vid?.height ?? null,
     durationLabel: durationLabel(vid?.durationMillis),
-    createdTime: f.createdTime ?? new Date(0).toISOString(),
+    // EXIF capture time when Drive has it (photos only — Drive doesn't expose
+    // one for video), else fall back to when it landed in Drive. This is what
+    // both sorting and the date shown in the lightbox use.
+    createdTime: exifTimeToIso(img?.time) ?? f.createdTime ?? new Date(0).toISOString(),
     hasThumb: isFolder ? false : Boolean(f.thumbnailLink),
   };
 }
@@ -88,13 +98,14 @@ export async function listFolder(folderId: string, skipCache = false): Promise<E
   do {
     const res = await drive().files.list({
       q: `'${folderId}' in parents and trashed = false`,
-      // Folders first, then newest media. Drive sorts server-side so we do not have to.
-      orderBy: "folder,createdTime desc",
+      // Just folders-first from Drive; real chronological order needs EXIF
+      // time, which orderBy can't sort by server-side — we sort below instead.
+      orderBy: "folder",
       pageSize: 200,
       pageToken,
       fields:
         "nextPageToken, files(id,name,mimeType,createdTime,thumbnailLink," +
-        "imageMediaMetadata(width,height),videoMediaMetadata(width,height,durationMillis))",
+        "imageMediaMetadata(width,height,time),videoMediaMetadata(width,height,durationMillis))",
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     });
@@ -109,8 +120,19 @@ export async function listFolder(folderId: string, skipCache = false): Promise<E
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
 
+  sortEntries(entries);
   listCache.set(folderId, entries);
   return entries;
+}
+
+/** Folders first (alphabetically), then media newest-taken-first. In place. */
+function sortEntries(entries: Entry[]): void {
+  entries.sort((a, b) => {
+    if (a.kind === "folder" && b.kind !== "folder") return -1;
+    if (a.kind !== "folder" && b.kind === "folder") return 1;
+    if (a.kind === "folder") return a.name.localeCompare(b.name);
+    return b.createdTime.localeCompare(a.createdTime);
+  });
 }
 
 async function node(id: string): Promise<{ name: string; parent: string | null }> {
@@ -192,6 +214,12 @@ export function invalidate(folderId: string) {
   listCache.drop(folderId);
 }
 
+/** Works on files and folders alike — Drive doesn't distinguish for a rename. */
+export async function renameFile(fileId: string, name: string): Promise<void> {
+  await drive().files.update({ fileId, requestBody: { name }, supportsAllDrives: true });
+  nodeCache.drop(fileId); // breadcrumbs() would otherwise keep showing the old name
+}
+
 /**
  * Moves to Drive's own Trash rather than a hard delete — recoverable for
  * Drive's normal retention window if someone taps the wrong tile, at no
@@ -204,6 +232,47 @@ export async function trashFile(fileId: string): Promise<void> {
     requestBody: { trashed: true },
     supportsAllDrives: true,
   });
+}
+
+/**
+ * Drive has no "search this folder and everything under it" query — `in
+ * parents` only checks the direct parent. And since this account's OAuth
+ * token now has full `drive` scope (not drive.file), an unscoped name search
+ * would also surface files completely outside the library. So: search Drive
+ * broadly, then keep only results that actually descend from `root`,
+ * re-using breadcrumbs()'s existing walk-up-to-root check for that. Capped
+ * at 25 matches so a common word doesn't turn into dozens of ancestry walks.
+ */
+export async function searchLibrary(term: string, root: string): Promise<Entry[]> {
+  const escaped = term.replace(/'/g, "\\'");
+  const res = await drive().files.list({
+    q: `name contains '${escaped}' and trashed = false`,
+    pageSize: 25,
+    fields:
+      "files(id,name,mimeType,createdTime,thumbnailLink,parents," +
+      "imageMediaMetadata(width,height,time),videoMediaMetadata(width,height,durationMillis))",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+
+  const matches: Entry[] = [];
+  for (const f of res.data.files ?? []) {
+    if (!f.id) continue;
+    const parent = f.parents?.[0];
+    if (!parent) continue;
+    try {
+      // Always the parent's path — "where does this live", not including the match's own name.
+      const crumbs = await breadcrumbs(parent, root);
+      const entry = toEntry(f);
+      entry.path = crumbs.length ? crumbs.map((c) => c.name).join(" › ") : "Album";
+      entry.parentId = parent;
+      matches.push(entry);
+    } catch {
+      // Not inside this library (either a different Drive tree entirely, or
+      // Documents' tree when this is Album's search) — silently skip it.
+    }
+  }
+  return matches;
 }
 
 /* ------------------------------------------------------------------ */

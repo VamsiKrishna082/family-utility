@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, ChevronLeft, ChevronRight, Download, Trash2 } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Download, Trash2, Pencil } from "lucide-react";
 import type { Entry } from "@/lib/types";
 
 export function Lightbox({
@@ -10,18 +10,26 @@ export function Lightbox({
   onClose,
   onIndex,
   onDelete,
+  onRename,
 }: {
   items: Entry[];
   index: number;
   onClose: () => void;
   onIndex: (i: number) => void;
   onDelete?: (item: Entry) => void | Promise<void>;
+  onRename?: (item: Entry, name: string) => void | Promise<void>;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draftName, setDraftName] = useState("");
   const item = items[index];
+
+  // A rename in progress shouldn't survive navigating to a different photo.
+  useEffect(() => setEditing(false), [index]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (editing) return;
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight") onIndex(Math.min(index + 1, items.length - 1));
       if (e.key === "ArrowLeft") onIndex(Math.max(index - 1, 0));
@@ -32,9 +40,20 @@ export function Lightbox({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [index, items.length, onClose, onIndex]);
+  }, [index, items.length, onClose, onIndex, editing]);
 
   if (!item) return null;
+
+  const saveRename = async () => {
+    const name = draftName.trim();
+    setEditing(false);
+    if (name && name !== item.name && onRename) await onRename(item, name);
+  };
+
+  const startRename = () => {
+    setDraftName(item.name);
+    setEditing(true);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(24,20,30,.94)" }}>
@@ -98,7 +117,29 @@ export function Lightbox({
       </div>
 
       <div className="px-6 pb-7">
-        <p className="display" style={{ fontSize: 18, color: "#fff" }}>{item.name}</p>
+        {editing ? (
+          <input
+            autoFocus
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            onBlur={saveRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveRename();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className="display"
+            style={{
+              fontSize: 18, color: "#fff", background: "transparent",
+              border: "none", borderBottom: "1px solid rgba(255,255,255,.4)", outline: "none",
+              width: "100%", maxWidth: 420,
+            }}
+          />
+        ) : (
+          <button onClick={startRename} className="flex items-center gap-2" disabled={!onRename}>
+            <p className="display" style={{ fontSize: 18, color: "#fff" }}>{item.name}</p>
+            {onRename && <Pencil size={13} color="rgba(255,255,255,.5)" />}
+          </button>
+        )}
         <p style={{ color: "rgba(255,255,255,.55)", fontSize: 13, marginTop: 3 }}>
           {new Date(item.createdTime).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
         </p>

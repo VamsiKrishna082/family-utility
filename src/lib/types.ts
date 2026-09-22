@@ -5,8 +5,13 @@ export type Entry = {
   width: number | null;
   height: number | null;
   durationLabel: string | null;
+  /** EXIF capture time when Drive has it (photos only), else Drive's own createdTime. Despite the name, this is "best known date", used for both display and sort order. */
   createdTime: string;
   hasThumb: boolean;
+  /** Only set on search results — the folder path leading to this item, for context outside its normal listing. */
+  path?: string;
+  /** Only set on search results — needed there (and only there) to invalidate the right folder's cache on delete/rename. */
+  parentId?: string;
 };
 
 export type Crumb = { id: string; name: string };
@@ -15,6 +20,11 @@ export type BrowseResponse = {
   folderId: string;
   crumbs: Crumb[];
   entries: Entry[];
+};
+
+export type SearchResponse = {
+  query: string;
+  results: Entry[];
 };
 
 /* ------------------------------------------------------------------ */
