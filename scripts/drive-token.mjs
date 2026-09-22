@@ -11,7 +11,12 @@ import { createInterface } from "node:readline/promises";
 
 const PORT = 5555;
 const REDIRECT = `http://localhost:${PORT}/callback`;
-const SCOPE = "https://www.googleapis.com/auth/drive.file";
+// Not drive.file: that scope only grants access to files this app itself
+// created, so a photo added directly in Drive (not through the app) would
+// be invisible to every files.list call here, no matter the cache TTL.
+// Full `drive` is what actually makes "add a photo in Drive, it appears in
+// the app" work, per this repo's own README.
+const SCOPE = "https://www.googleapis.com/auth/drive";
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const clientId = process.env.GOOGLE_CLIENT_ID ?? (await rl.question("GOOGLE_CLIENT_ID: "));
