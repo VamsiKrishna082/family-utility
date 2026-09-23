@@ -172,8 +172,8 @@ export function MoneyQuickAdd({
         </div>
 
         <div className="px-5 py-4">
-          <div className="flex gap-2 items-stretch" style={{ marginBottom: 16 }}>
-            <div className="flex flex-1" style={{ borderRadius: 10, border: "1px solid var(--line)", overflow: "hidden" }}>
+          <div className="flex gap-2 items-stretch" style={{ marginBottom: 16, flexWrap: "wrap" }}>
+            <div className="flex flex-1" style={{ minWidth: 220, borderRadius: 10, border: "1px solid var(--line)", overflow: "hidden" }}>
               {TYPES.map((t) => (
                 <button
                   key={t.value}

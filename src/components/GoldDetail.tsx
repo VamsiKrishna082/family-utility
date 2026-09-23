@@ -246,8 +246,8 @@ function GoldItemRow({ item, rate, onDelete, onSaved }: { item: NwGoldItem; rate
           <input type="date" value={buyDate} onChange={(e) => setBuyDate(e.target.value)} style={{ borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <input type="number" inputMode="decimal" value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} placeholder="Buy price (optional)" style={{ width: 140, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
-          <input type="number" inputMode="decimal" value={manualValue} onChange={(e) => setManualValue(e.target.value)} placeholder="Current value (optional)" style={{ width: 150, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
+          <input type="number" inputMode="decimal" value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} placeholder="Buy price" style={{ width: 140, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
+          <input type="number" inputMode="decimal" value={manualValue} onChange={(e) => setManualValue(e.target.value)} placeholder="Current value" style={{ width: 150, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
           <button className="btn btn-dark" onClick={save} disabled={saving} style={{ fontSize: 12.5, padding: "6px 12px" }}>{saving ? "…" : "Save"}</button>
           <button onClick={() => setEditing(false)} style={{ fontSize: 12.5, color: "var(--faint)" }}>Cancel</button>
         </div>
@@ -326,8 +326,8 @@ function AddGoldItemForm({ accountId, onDone, onCancel }: { accountId: string; o
         <input type="date" value={buyDate} onChange={(e) => setBuyDate(e.target.value)} style={{ borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <input type="number" inputMode="decimal" value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} placeholder="Buy price (optional)" style={{ width: 140, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
-        <input type="number" inputMode="decimal" value={manualValue} onChange={(e) => setManualValue(e.target.value)} placeholder="Current value (optional)" style={{ width: 150, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
+        <input type="number" inputMode="decimal" value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} placeholder="Buy price" style={{ width: 140, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
+        <input type="number" inputMode="decimal" value={manualValue} onChange={(e) => setManualValue(e.target.value)} placeholder="Current value" style={{ width: 150, borderRadius: 8, border: "1px solid var(--line)", padding: "6px 8px", fontSize: 13 }} />
         <button className="btn btn-dark" onClick={submit} disabled={saving} style={{ fontSize: 12.5, padding: "6px 12px" }}>{saving ? "…" : "Add"}</button>
         <button onClick={onCancel} style={{ fontSize: 12.5, color: "var(--faint)" }}>Cancel</button>
       </div>

@@ -439,7 +439,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
         borderRadius: 8,
       }}
     >
-      <div className="flex items-start gap-4 mb-4">
+      <div className="flex items-start gap-4 mb-4" style={{ flexWrap: "wrap" }}>
         {crumbs.length > 0 && !isSearchActive && (
           <Link
             href={parentId ? `/album?folder=${parentId}` : "/album"}
@@ -450,7 +450,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           </Link>
         )}
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1" style={{ minWidth: 140 }}>
           <h1 className="display flex items-center gap-2.5" style={{ fontSize: 30, lineHeight: 1.15 }}>
             {here}
             {navigating && <Loader2 size={18} className="spin" color="var(--faint)" />}
@@ -470,7 +470,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+        <div className="flex flex-wrap gap-2 shrink-0 justify-end" style={{ marginLeft: "auto" }}>
           <button
             className="btn btn-plain flex items-center justify-center"
             onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}

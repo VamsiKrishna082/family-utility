@@ -97,7 +97,7 @@ export function DocsBrowser({ folderId }: { folderId: string | null }) {
         borderRadius: 8,
       }}
     >
-      <div className="flex items-start gap-4 mb-7">
+      <div className="flex items-start gap-4 mb-7" style={{ flexWrap: "wrap" }}>
         {crumbs.length > 0 && (
           <Link
             href={parentId ? `/docs?folder=${parentId}` : "/docs"}
@@ -108,14 +108,14 @@ export function DocsBrowser({ folderId }: { folderId: string | null }) {
           </Link>
         )}
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1" style={{ minWidth: 140 }}>
           <h1 className="display" style={{ fontSize: 30, lineHeight: 1.15 }}>{here}</h1>
           <p style={{ color: "var(--dim)", fontSize: 14, marginTop: 4 }}>
             {crumbs.length === 0 ? "Papers that matter" : ["Documents", ...crumbs.map((c) => c.name)].join("  ›  ")}
           </p>
         </div>
 
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 shrink-0" style={{ marginLeft: "auto" }}>
           <button className="btn btn-plain flex items-center gap-2" onClick={() => setCreating((v) => !v)}>
             <FolderPlus size={16} /> <span className="hidden sm:inline">New folder</span>
           </button>

@@ -101,15 +101,15 @@ export function MoneyDashboard() {
 
   return (
     <div>
-      <div className="flex items-start gap-4 mb-6">
+      <div className="flex items-start gap-4 mb-6" style={{ flexWrap: "wrap" }}>
         <Link href="/" className="flex items-center justify-center shrink-0 card" style={{ width: 38, height: 38, borderRadius: 12 }}>
           <ChevronLeft size={19} />
         </Link>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1" style={{ minWidth: 160 }}>
           <h1 className="display" style={{ fontSize: 30 }}>Money</h1>
           <p style={{ color: "var(--dim)", fontSize: 14, marginTop: 4 }}>One pooled pot — no splitting, no settling up.</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0" style={{ marginLeft: "auto" }}>
           <div className="flex items-center gap-1 card" style={{ padding: "6px 10px" }}>
             <button aria-label="Previous month" onClick={() => setViewMonth(shiftMonthKey(displayMonth!, -1))}><ChevronLeft size={16} /></button>
             <span style={{ fontSize: 13.5, fontWeight: 600, minWidth: 92, textAlign: "center" }}>{displayMonth ? monthKeyLabel(displayMonth) : ""}</span>
@@ -190,7 +190,7 @@ export function MoneyDashboard() {
         )}
       </div>
 
-      <div style={{ display: "grid", gap: 20, gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-5">
         {/* Spent & invested by category */}
         <div className="card" style={{ padding: 20 }}>
           <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Spent &amp; invested by category</p>
@@ -267,7 +267,7 @@ export function MoneyDashboard() {
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 20, gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-5">
         <MoneyRecurring categories={categories} onPosted={() => mutate()} />
         <MoneyGoals savingCategories={savingCategories} onContributed={() => mutate()} />
       </div>
