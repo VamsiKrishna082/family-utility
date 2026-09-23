@@ -86,9 +86,13 @@ export async function applyMonthDeltas(t: Transaction, plans: MonthDeltaPlan[]):
     for (const { input, sign } of plan.ops) {
       const signed = sign * input.amountPaise;
       if (input.type === "income") summary.incomePaise += signed;
-      else if (input.type === "expense") summary.expensePaise += signed;
+      // A credit-card swipe is still a real expense for budgeting (it counts
+      // in byGroup/byCategory below like any other), but it isn't cash out of
+      // pocket yet — only the bill payment later is, and that's just a normal
+      // expense with a different mode. So it's excluded here specifically.
+      else if (input.type === "expense" && input.mode !== "credit_card") summary.expensePaise += signed;
       else if (input.type === "saving") summary.savingPaise += signed;
-      // transfer touches neither total, per spec — excluded from all totals.
+      // transfer (and a credit-card swipe) touch neither total, per spec — excluded from all totals.
       add(summary.byGroup, input.group, signed);
       add(summary.byCategory, input.categoryId, signed);
       if (input.mode) add(summary.byMode, input.mode, signed);
@@ -134,7 +138,7 @@ export async function recomputeMonth(monthKey: string): Promise<MoneyMonthSummar
     }
     const group = catCache.get(tx.categoryId)!;
     if (tx.type === "income") summary.incomePaise += tx.amountPaise;
-    else if (tx.type === "expense") summary.expensePaise += tx.amountPaise;
+    else if (tx.type === "expense" && tx.mode !== "credit_card") summary.expensePaise += tx.amountPaise;
     else if (tx.type === "saving") summary.savingPaise += tx.amountPaise;
     add(summary.byGroup, group, tx.amountPaise);
     add(summary.byCategory, tx.categoryId, tx.amountPaise);

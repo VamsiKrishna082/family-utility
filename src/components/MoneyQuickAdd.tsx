@@ -1,10 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useSWRConfig } from "swr";
-import { X, Plus } from "lucide-react";
+import useSWR, { useSWRConfig } from "swr";
+import { X, Plus, CreditCard } from "lucide-react";
 import { parseRupeesToPaise } from "@/lib/money";
-import { MONEY_MODES, type MoneyCategory, type MoneyTx, type MoneyTxType } from "@/lib/types";
+import { MONEY_MODES, type MoneyCard, type MoneyCardsResponse, type MoneyCategory, type MoneyTx, type MoneyTxType } from "@/lib/types";
+
+const fetcher = async (url: string) => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Could not load");
+  return r.json();
+};
 
 const TYPES: { value: MoneyTxType; label: string }[] = [
   { value: "expense", label: "Expense" },
@@ -30,19 +36,24 @@ export function MoneyQuickAdd({
   onSaved,
   categories,
   editing,
+  initialCreditCard,
+  initialCardId,
 }: {
   onClose: () => void;
   onSaved: () => void;
   categories: MoneyCategory[];
   /** Pre-fills every field and PATCHes instead of POSTing when set — same sheet, edit mode. */
   editing?: MoneyTx;
+  /** Opens straight into the "paid by credit card" state — used by the Credit cards page's own "Log a spend" button. */
+  initialCreditCard?: boolean;
+  initialCardId?: string;
 }) {
   const [type, setType] = useState<MoneyTxType>(editing?.type ?? "expense");
   const [amount, setAmount] = useState(editing ? String(editing.amountPaise / 100) : "");
   const [categoryId, setCategoryId] = useState<string | null>(editing?.categoryId ?? null);
   const [note, setNote] = useState(editing?.note ?? "");
   const [date, setDate] = useState(editing?.date ?? todayISO());
-  const [mode, setMode] = useState<(typeof MONEY_MODES)[number] | "">(editing?.mode ?? "");
+  const [mode, setMode] = useState<(typeof MONEY_MODES)[number] | "">(editing?.mode && editing.mode !== "credit_card" ? editing.mode : "");
   const [tagsInput, setTagsInput] = useState(editing?.tags.join(", ") ?? "");
   const [more, setMore] = useState(Boolean(editing));
   const [saving, setSaving] = useState(false);
@@ -50,15 +61,25 @@ export function MoneyQuickAdd({
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [ccSpend, setCcSpend] = useState(initialCreditCard ?? editing?.mode === "credit_card");
+  const [cardId, setCardId] = useState<string | null>(initialCardId ?? editing?.cardId ?? null);
+  const [addingCard, setAddingCard] = useState(false);
+  const [newCardName, setNewCardName] = useState("");
+  const [creatingCard, setCreatingCard] = useState(false);
   const { mutate: globalMutate } = useSWRConfig();
+  const { data: cardsData, mutate: mutateCards } = useSWR<MoneyCardsResponse>(type === "expense" ? "/api/money/cards" : null, fetcher);
+  const cards = (cardsData?.items ?? []).filter((c) => !c.archived);
 
   const forType = useMemo(
     () => categories.filter((c) => c.type === type && !c.archived).sort((a, b) => b.useCount - a.useCount || a.order - b.order),
     [categories, type],
   );
   const quick = forType.slice(0, 8);
+  const selectedCategoryName = forType.find((c) => c.id === categoryId)?.name ?? categories.find((c) => c.id === categoryId)?.name;
+  const isCreditCardPaymentCategory = type === "expense" && !ccSpend && selectedCategoryName?.toLowerCase() === "credit card";
+  const showCardPicker = ccSpend || isCreditCardPaymentCategory;
 
-  const canSave = Boolean(parseRupeesToPaise(amount) && categoryId);
+  const canSave = Boolean(parseRupeesToPaise(amount) && categoryId && (!ccSpend || cardId));
 
   const createCategory = async () => {
     const name = newCategoryName.trim();
@@ -83,6 +104,29 @@ export function MoneyQuickAdd({
     }
   };
 
+  const createCard = async () => {
+    const name = newCardName.trim();
+    if (!name) return;
+    setCreatingCard(true);
+    try {
+      const res = await fetch("/api/money/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not add card");
+      const { card } = (await res.json()) as { card: MoneyCard };
+      await mutateCards();
+      setCardId(card.id);
+      setNewCardName("");
+      setAddingCard(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add card");
+    } finally {
+      setCreatingCard(false);
+    }
+  };
+
   const save = async (again: boolean) => {
     const amountPaise = parseRupeesToPaise(amount);
     if (!amountPaise || !categoryId) return;
@@ -91,7 +135,8 @@ export function MoneyQuickAdd({
     try {
       const body = {
         type, amountPaise, categoryId, date, note,
-        mode: mode || undefined,
+        mode: ccSpend ? "credit_card" : (mode || undefined),
+        cardId: showCardPicker && cardId ? cardId : (editing?.cardId ? null : undefined),
         tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
       };
       const res = editing
@@ -132,7 +177,7 @@ export function MoneyQuickAdd({
               {TYPES.map((t) => (
                 <button
                   key={t.value}
-                  onClick={() => { setType(t.value); setCategoryId(null); }}
+                  onClick={() => { setType(t.value); setCategoryId(null); if (t.value !== "expense") { setMode(""); setCardId(null); setCcSpend(false); } }}
                   className="flex-1"
                   style={{ padding: "9px 8px", fontSize: 13, fontWeight: 600, background: type === t.value ? "var(--ink)" : "var(--card)", color: type === t.value ? "#fff" : "var(--dim)" }}
                 >
@@ -225,6 +270,54 @@ export function MoneyQuickAdd({
             </select>
           )}
 
+          {type === "expense" && (
+            <div className="mb-4">
+              <button
+                onClick={() => { const next = !ccSpend; setCcSpend(next); if (!next) setCardId(null); }}
+                className="flex items-center gap-2"
+                style={{
+                  width: "100%", padding: "10px 12px", borderRadius: 10, fontSize: 13.5, fontWeight: 600, textAlign: "left",
+                  border: `1px solid ${ccSpend ? "var(--indigo)" : "var(--line)"}`,
+                  background: ccSpend ? "var(--indigo)" : "var(--card)",
+                  color: ccSpend ? "#fff" : "var(--ink)",
+                }}
+              >
+                <CreditCard size={15} /> Paid by credit card
+              </button>
+              {ccSpend && (
+                <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 4 }}>Counts under this category, but won&apos;t reduce Left to spend — only the bill payment later does.</p>
+              )}
+
+              {ccSpend && (
+                <div className="mt-2">
+                  <select
+                    value={cardId ?? ""}
+                    onChange={(e) => (e.target.value === "__new" ? setAddingCard(true) : setCardId(e.target.value || null))}
+                    style={{ width: "100%", borderRadius: 10, border: `1px solid ${!cardId ? "var(--red)" : "var(--line)"}`, padding: "9px 12px", fontSize: 14 }}
+                  >
+                    <option value="">Which card? (required)</option>
+                    {cards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.last4 ? ` •••• ${c.last4}` : ""}</option>)}
+                    <option value="__new">+ Add a new card…</option>
+                  </select>
+                  {addingCard && (
+                    <div className="card flex gap-2 mt-2" style={{ padding: 10 }}>
+                      <input
+                        autoFocus type="text" placeholder="Card name, e.g. HDFC Regalia"
+                        value={newCardName} onChange={(e) => setNewCardName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && createCard()}
+                        className="flex-1" style={{ border: "none", outline: "none", fontSize: 13.5, background: "transparent" }}
+                      />
+                      <button className="btn btn-plain" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={() => setAddingCard(false)}>Cancel</button>
+                      <button className="btn btn-dark" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={createCard} disabled={!newCardName.trim() || creatingCard}>
+                        {creatingCard ? "Adding…" : "Add"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {!more ? (
             <button onClick={() => setMore(true)} style={{ fontSize: 13, color: "var(--indigo)", fontWeight: 600, marginTop: 8 }}>
               + Note, mode, tags
@@ -235,13 +328,44 @@ export function MoneyQuickAdd({
                 type="text" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)}
                 style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 14 }}
               />
-              <select
-                value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}
-                style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 14 }}
-              >
-                <option value="">Payment mode</option>
-                {MONEY_MODES.map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
-              </select>
+              {!ccSpend && (
+                <select
+                  value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}
+                  style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 14 }}
+                >
+                  <option value="">Payment mode</option>
+                  {MONEY_MODES.filter((m) => m !== "credit_card").map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
+                </select>
+              )}
+
+              {isCreditCardPaymentCategory && (
+                <div>
+                  <select
+                    value={cardId ?? ""}
+                    onChange={(e) => (e.target.value === "__new" ? setAddingCard(true) : setCardId(e.target.value || null))}
+                    style={{ width: "100%", borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 14 }}
+                  >
+                    <option value="">Which card&apos;s bill? (optional)</option>
+                    {cards.map((c) => <option key={c.id} value={c.id}>{c.name}{c.last4 ? ` •••• ${c.last4}` : ""}</option>)}
+                    <option value="__new">+ Add a new card…</option>
+                  </select>
+                  {addingCard && (
+                    <div className="card flex gap-2 mt-2" style={{ padding: 10 }}>
+                      <input
+                        autoFocus type="text" placeholder="Card name, e.g. HDFC Regalia"
+                        value={newCardName} onChange={(e) => setNewCardName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && createCard()}
+                        className="flex-1" style={{ border: "none", outline: "none", fontSize: 13.5, background: "transparent" }}
+                      />
+                      <button className="btn btn-plain" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={() => setAddingCard(false)}>Cancel</button>
+                      <button className="btn btn-dark" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={createCard} disabled={!newCardName.trim() || creatingCard}>
+                        {creatingCard ? "Adding…" : "Add"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <input
                 type="text" placeholder="Tags, comma separated (optional)" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)}
                 style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 14 }}

@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
-import { ChevronLeft, ChevronRight, Plus, PiggyBank } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, PiggyBank, CreditCard } from "lucide-react";
 import { formatPaise, formatPaiseExact, parseRupeesToPaise } from "@/lib/money";
-import type { MoneyDashboardResponse, MoneyCategoriesResponse, MoneyGoalsResponse, MoneyTx } from "@/lib/types";
+import type { MoneyCreditCardsResponse, MoneyDashboardResponse, MoneyCategoriesResponse, MoneyGoalsResponse, MoneyTx } from "@/lib/types";
 import { MoneyQuickAdd } from "@/components/MoneyQuickAdd";
 import { MoneyRecurring } from "@/components/MoneyRecurring";
 import { MoneyGoals } from "@/components/MoneyGoals";
@@ -48,6 +48,7 @@ export function MoneyDashboard() {
     fetcher,
   );
   const { data: catData, error: catError } = useSWR<MoneyCategoriesResponse>("/api/money/categories", fetcher);
+  const { data: cardsData } = useSWR<MoneyCreditCardsResponse>("/api/money/cards/summary", fetcher);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
 
@@ -151,6 +152,19 @@ export function MoneyDashboard() {
             <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 3 }}>{formatPaise(data.safeToSpendPerDayPaise)}/day safe to spend</p>
           )}
         </div>
+        <Link href="/money/cards" className="card block" style={{ padding: 18 }}>
+          <p className="flex items-center gap-1.5" style={{ color: "var(--faint)", fontSize: 12.5 }}>
+            <CreditCard size={12} /> Credit card bill
+          </p>
+          {cardsData && cardsData.cards.length > 0 ? (
+            <>
+              <p className="display" style={{ fontSize: 22, marginTop: 6 }}>{formatPaise(cardsData.totalOutstandingPaise)}</p>
+              <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 3 }}>to be paid, {cardsData.cards.length} card{cardsData.cards.length === 1 ? "" : "s"}</p>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: "var(--indigo)", marginTop: 8, fontWeight: 600 }}>+ Add a card</p>
+          )}
+        </Link>
       </div>
 
       {/* Recent entries */}

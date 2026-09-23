@@ -41,8 +41,37 @@ export type FavoritesResponse = {
 export const MONEY_TX_TYPES = ["income", "expense", "saving", "transfer"] as const;
 export type MoneyTxType = (typeof MONEY_TX_TYPES)[number];
 
-export const MONEY_MODES = ["upi", "card", "cash", "bank_transfer"] as const;
+export const MONEY_MODES = ["upi", "card", "cash", "bank_transfer", "credit_card"] as const;
 export type MoneyMode = (typeof MONEY_MODES)[number];
+
+/** A credit card, for the "spent on credit card" flow — see MoneyTx.cardId. */
+export type MoneyCard = {
+  id: string;
+  name: string;
+  last4?: string;
+  archived: boolean;
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+};
+export type MoneyCardsResponse = { items: MoneyCard[] };
+
+/**
+ * Per card: 'spentPaise' is every mode:'credit_card' transaction ever logged
+ * against it (a swipe — doesn't touch expensePaise/leftover, see moneyEngine);
+ * 'paidPaise' is every other transaction with this cardId set (a bill
+ * payment — a normal expense that DOES touch leftover). The difference is
+ * what's still owed — "bill to be paid" — not scoped to a single month,
+ * since a card's balance doesn't reset at a calendar boundary.
+ */
+export type MoneyCreditCardSummary = {
+  card: MoneyCard;
+  spentPaise: number;
+  paidPaise: number;
+  outstandingPaise: number;
+  spentThisMonthPaise: number;
+};
+export type MoneyCreditCardsResponse = { cards: MoneyCreditCardSummary[]; totalOutstandingPaise: number };
 
 export type MoneyCategory = {
   id: string;
@@ -65,6 +94,8 @@ export type MoneyTx = {
   categoryId: string;
   note: string;
   mode?: MoneyMode;
+  /** Which card — set for both a credit-card swipe (mode: 'credit_card') and a bill payment against that card (any other mode). */
+  cardId?: string;
   paidBy: string; // email — recorded for context only, never drives balances (one pooled pot)
   tags: string[];
   source: "manual" | "recurring";

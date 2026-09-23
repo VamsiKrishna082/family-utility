@@ -14,6 +14,7 @@ const Body = z.object({
   categoryId: z.string().min(1).optional(),
   note: z.string().max(300).optional(),
   mode: z.enum(MONEY_MODES).optional(),
+  cardId: z.string().nullable().optional(),
   paidBy: z.string().email().optional(),
   tags: z.array(z.string().trim().min(1).max(30)).optional(),
 });
@@ -57,6 +58,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         categoryId: newCategoryId,
         note: patch.note ?? oldTx.note,
         mode: patch.mode ?? oldTx.mode,
+        cardId: patch.cardId === null ? undefined : (patch.cardId ?? oldTx.cardId),
         paidBy: patch.paidBy ?? oldTx.paidBy,
         tags: patch.tags ?? oldTx.tags,
         updatedAt: Date.now(),
