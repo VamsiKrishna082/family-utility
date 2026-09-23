@@ -20,6 +20,11 @@ html, body { background: var(--paper); color: var(--ink); font-family: var(--ui)
 * { -webkit-tap-highlight-color: transparent; }
 button, input { font-family: inherit; }
 input::placeholder { color: var(--faint); }
+/* Unstyled <button> defaults to the arrow cursor in every browser — only <a>
+   gets a hand pointer for free. Every section relies on plain <button>
+   elements for actions (Money, Net worth especially), so this one rule
+   covers all of them instead of annotating each button individually. */
+button:not(:disabled) { cursor: pointer; }
 
 .display { font-family: var(--display); font-weight: 400; }
 

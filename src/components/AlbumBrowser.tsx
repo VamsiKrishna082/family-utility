@@ -7,7 +7,7 @@ import {
   ChevronLeft, Folder, FolderPlus, Upload, Loader2, RefreshCw,
   Search, X, CheckSquare, Trash2, Pencil, Star, Move, ImageOff,
 } from "lucide-react";
-import type { BrowseResponse, Entry, SearchResponse } from "@/lib/types";
+import type { BrowseResponse, Entry, FavoritesResponse, SearchResponse } from "@/lib/types";
 import { uploadOne, type UploadProgress } from "@/lib/upload";
 import { Thumb } from "@/components/Thumb";
 import { Lightbox } from "@/components/Lightbox";
@@ -81,6 +81,11 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
   const crumbs = data?.crumbs ?? [];
   const parentId = crumbs.length > 1 ? crumbs[crumbs.length - 2].id : null;
   const here = crumbs.length ? crumbs[crumbs.length - 1].name : "Album";
+
+  // Only fetched at the Album root, where the Favourites tile lives — `null`
+  // as the key tells SWR to skip the request everywhere else.
+  const { data: favData } = useSWR<FavoritesResponse>(crumbs.length === 0 ? "/api/favorites" : null, fetcher);
+  const favoritesCoverId = favData?.results[0]?.id;
 
   const photoCount = useMemo(() => media.filter((m) => m.kind === "photo").length, [media]);
   const videoCount = useMemo(() => media.filter((m) => m.kind === "video").length, [media]);
@@ -546,7 +551,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                           src={`/api/thumb/${f.coverId}?w=520`}
                           alt=""
                           loading="lazy"
-                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 22%" }}
                         />
                       ) : (
                         <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0, background: "var(--line2)" }}>
@@ -684,10 +689,27 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                 className="card block relative overflow-hidden"
                 style={{ aspectRatio: "4 / 3", padding: 0 }}
               >
-                <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0, background: "var(--line2)" }}>
-                  <Star size={30} color="#c78a1e" fill="#ffc84a" strokeWidth={1.5} />
-                </span>
+                {favoritesCoverId ? (
+                  <img
+                    src={`/api/thumb/${favoritesCoverId}?w=520`}
+                    alt=""
+                    loading="lazy"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 22%" }}
+                  />
+                ) : (
+                  <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0, background: "var(--line2)" }}>
+                    <Star size={30} color="#c78a1e" fill="#ffc84a" strokeWidth={1.5} />
+                  </span>
+                )}
                 <span style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10,8,16,.68), rgba(10,8,16,0) 55%)" }} />
+                {favoritesCoverId && (
+                  <span
+                    className="flex items-center justify-center"
+                    style={{ position: "absolute", top: 10, right: 10, width: 26, height: 26, borderRadius: 8, background: "rgba(10,8,16,.55)" }}
+                  >
+                    <Star size={13} color="#ffc84a" fill="#ffc84a" strokeWidth={1.5} />
+                  </span>
+                )}
                 <span
                   className="truncate"
                   style={{ position: "absolute", left: 14, right: 14, bottom: 12, color: "#fff", fontSize: 14.5, fontWeight: 600, textShadow: "0 1px 3px rgba(0,0,0,.35)" }}
@@ -736,7 +758,7 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
                           src={`/api/thumb/${f.coverId}?w=520`}
                           alt=""
                           loading="lazy"
-                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "50% 22%" }}
                         />
                       ) : (
                         <span

@@ -14,14 +14,20 @@ export function formatINR(amountRupees: number): string {
 }
 
 /**
- * 11510000 paise -> "₹1,15,100". Money-specific: that section stores integer
- * paise (see money.md), never floats. Anything ₹1,00,000 and over switches to
- * a lakh-abbreviated form ("₹38.6 L") — a full-digit six- or seven-figure
- * number is hard to read at a glance in a dashboard KPI card.
+ * 11510000 paise -> "₹1,15,100". Both Money and Net worth store integer paise
+ * (see money.md / networth.md), never floats. Anything ₹1,00,000 and over
+ * switches to lakh ("₹38.6 L") and ₹1,00,00,000 and over to crore ("₹1.25
+ * Cr") — a full-digit six-, seven- or eight-figure number is hard to read at
+ * a glance in a dashboard card. Money's own figures will essentially never
+ * reach crore; net worth totals (property, combined assets) realistically can.
  */
 export function formatPaise(amountPaise: number): string {
   const sign = amountPaise < 0 ? "-" : "";
   const rupeeValue = Math.abs(amountPaise) / 100;
+  if (rupeeValue >= 1_00_00_000) {
+    const crores = rupeeValue / 1_00_00_000;
+    return `${sign}₹${crores.toFixed(crores >= 10 ? 1 : 2)} Cr`;
+  }
   if (rupeeValue >= 100_000) {
     const lakhs = rupeeValue / 100_000;
     return `${sign}₹${lakhs.toFixed(lakhs >= 10 ? 1 : 2)} L`;
