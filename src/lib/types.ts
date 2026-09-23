@@ -38,22 +38,144 @@ export type FavoritesResponse = {
 /* ------------------------------------------------------------------ */
 /* Money — one pooled pot, no split-and-settle                         */
 /* ------------------------------------------------------------------ */
-export const MONEY_EXPENSE_CATEGORIES = [
-  "Groceries", "Rent", "Utilities", "Transport", "Health",
-  "Dining", "Shopping", "Entertainment", "Other",
-] as const;
-export const MONEY_INCOME_CATEGORIES = ["Salary", "Other"] as const;
+export const MONEY_TX_TYPES = ["income", "expense", "saving", "transfer"] as const;
+export type MoneyTxType = (typeof MONEY_TX_TYPES)[number];
 
-export type MoneyEntry = {
+export const MONEY_MODES = ["upi", "card", "cash", "bank_transfer"] as const;
+export type MoneyMode = (typeof MONEY_MODES)[number];
+
+export type MoneyCategory = {
   id: string;
-  kind: "income" | "expense";
-  amount: number; // rupees, whole numbers only
-  category: string;
-  note: string;
-  date: string; // yyyy-mm-dd
-  addedBy: string; // email
-  createdAt: number; // epoch ms
+  name: string;
+  group: string;
+  type: MoneyTxType;
+  order: number;
+  archived: boolean;
+  /** How many transactions have used this category — drives the quick-add grid's "most used first" ordering. */
+  useCount: number;
 };
+
+export type MoneyTx = {
+  id: string;
+  type: MoneyTxType;
+  amountPaise: number;
+  date: string; // yyyy-mm-dd
+  /** Computed server-side from date + money_settings.monthStartDay — the client never sets this. */
+  monthKey: string; // yyyy-mm
+  categoryId: string;
+  note: string;
+  mode?: MoneyMode;
+  paidBy: string; // email — recorded for context only, never drives balances (one pooled pot)
+  tags: string[];
+  source: "manual" | "recurring";
+  /** Set when this entry was posted from a recurring template ("Post this month"). */
+  recurringId?: string;
+  createdBy: string; // email
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type MoneyMonthSummary = {
+  monthKey: string;
+  incomePaise: number;
+  expensePaise: number;
+  savingPaise: number;
+  surplusPaise: number; // income - expense - saving, this month alone
+  carryInPaise: number; // previous month's leftPaise (or opening balance for the first month ever)
+  leftPaise: number; // carryInPaise + surplusPaise
+  byGroup: Record<string, number>;
+  byCategory: Record<string, number>;
+  byMode: Record<string, number>;
+  txCount: number;
+  updatedAt: number;
+};
+
+export type MoneySettings = {
+  monthStartDay: number; // default 1
+  currency: "INR";
+  openingBalancePaise: number;
+  updatedAt: number;
+};
+
+export type MoneyBudget = {
+  monthKey: string;
+  byGroup: Record<string, number>;
+  byCategory?: Record<string, number>;
+};
+
+export type MoneyDashboardResponse = {
+  monthKey: string;
+  isCurrentMonth: boolean;
+  prevMonthKey: string;
+  prevMonthLabel: string;
+  prevMonthExpensePaise: number;
+  prevByCategory: Record<string, number>;
+  summary: MoneyMonthSummary;
+  budget: MoneyBudget;
+  recent: MoneyTx[];
+  topExpenses: MoneyTx[];
+  safeToSpendPerDayPaise: number | null;
+};
+
+export type MoneyCategoriesResponse = { items: MoneyCategory[] };
+export type MoneyTxListResponse = { items: MoneyTx[]; nextCursor: string | null };
+
+/** A template you tap "Post this month" on instead of typing rent/EMI/SIP from scratch each time. No auto-posting yet — every post is a manual, one-tap trigger. */
+export type MoneyRecurring = {
+  id: string;
+  name: string;
+  type: MoneyTxType;
+  amountPaise: number;
+  categoryId: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+};
+export type MoneyRecurringResponse = { items: MoneyRecurring[] };
+
+export type MoneyGoal = {
+  id: string;
+  name: string;
+  targetPaise: number;
+  savedPaise: number;
+  createdAt: number;
+  updatedAt: number;
+};
+export type MoneyGoalsResponse = { items: MoneyGoal[] };
+
+/** Seeded into money_categories the first time the categories endpoint runs on an empty collection. */
+export const MONEY_SEED_CATEGORIES: { name: string; group: string; type: MoneyTxType }[] = (() => {
+  const income = ["Salary", "Freelance / side income", "Interest & dividends", "Refunds & cashback", "Gifts received", "Other income"];
+  const expenseGroups: Record<string, string[]> = {
+    Housing: ["Rent", "Society maintenance", "Repairs & upkeep"],
+    "Groceries & household": ["Groceries", "Vegetables & fruits", "Milk & daily needs", "Household supplies"],
+    "Food & dining": ["Dining out", "Food delivery", "Snacks & coffee"],
+    "Utilities & recharges": ["Electricity", "Water", "Cooking gas", "Broadband", "Mobile recharge"],
+    Transport: ["Fuel", "Cab / auto", "Metro / bus / train", "Vehicle service", "Parking & tolls"],
+    "EMIs & loans": ["Home loan EMI", "Vehicle loan EMI", "Personal loan EMI", "Card interest & late fees"],
+    Insurance: ["Health", "Term life", "Vehicle"],
+    Health: ["Doctor", "Medicines", "Lab tests"],
+    "Shopping & personal": ["Clothing", "Electronics", "Personal care & salon"],
+    "Household help": ["Maid", "Cook", "Driver", "Laundry / ironing"],
+    "Family & gifts": ["Support to parents", "Gifts", "Functions & weddings", "Festivals"],
+    "Subscriptions & fun": ["OTT & apps", "Movies & outings", "Hobbies"],
+    Travel: ["Trips", "Stays"],
+    Learning: ["Courses & certifications", "Books"],
+    "Donations & offerings": ["Donations & offerings"],
+    "Fees & taxes": ["Income tax", "Bank charges", "Government fees"],
+    Miscellaneous: ["Miscellaneous"],
+  };
+  const saving = ["Mutual fund SIP", "Recurring deposit", "Fixed deposit", "PPF", "NPS", "Stocks", "Gold"];
+  const transfer = ["Credit card bill payment", "Own account transfer", "Cash withdrawal"];
+
+  const out: { name: string; group: string; type: MoneyTxType }[] = [];
+  income.forEach((name) => out.push({ name, group: "Income", type: "income" }));
+  for (const [group, names] of Object.entries(expenseGroups)) names.forEach((name) => out.push({ name, group, type: "expense" }));
+  saving.forEach((name) => out.push({ name, group: "Savings", type: "saving" }));
+  transfer.forEach((name) => out.push({ name, group: "Transfers", type: "transfer" }));
+  return out;
+})();
 
 /* ------------------------------------------------------------------ */
 /* Net worth                                                           */

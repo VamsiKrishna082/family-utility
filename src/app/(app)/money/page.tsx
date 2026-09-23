@@ -1,5 +1,5 @@
-import { MoneyBrowser } from "@/components/MoneyBrowser";
+import { MoneyDashboard } from "@/components/MoneyDashboard";
 
 export default function MoneyPage() {
-  return <MoneyBrowser />;
+  return <MoneyDashboard />;
 }
