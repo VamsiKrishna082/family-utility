@@ -32,6 +32,8 @@ A credit card purchase is recorded as an `expense` on the swipe date. The later 
 
 Store as `group` → `category`. Users can rename, reorder, archive and add. Archived categories keep their history.
 
+**Sub-categories** (optional, e.g. Food → Elanir, Cake, Snacks): a free-text `subcategory` on each transaction, snapped case-insensitively to one the category already has so spellings don't split totals. Every new one is appended to the category's `subcategories[]` list, which quick-add offers as chips. Totals and month summaries still roll up by category only. On the dashboard, tapping a category opens `/money/category/{id}?month=`, which shows sub-category totals (entries with none go under "No sub-category"). Tapping a sub-category lists its individual entries.
+
 **Income:** Salary · Freelance / side income · Interest & dividends · Refunds & cashback · Gifts received · Other income
 
 **Expense groups:**
@@ -106,9 +108,9 @@ On the phone, stack in this order: Left-to-spend hero (with carried over, income
 
 ```
 money_settings/main          monthStartDay, currency:'INR', openingBalancePaise, updatedAt
-money_categories/{id}        name, group, type, order, archived, icon?
+money_categories/{id}        name, group, type, order, archived, icon?, subcategories?[]
 money_tx/{id}                type, amountPaise, date 'YYYY-MM-DD', monthKey, categoryId,
-                             note?, mode?, paidBy (uid), tags[], receiptPath?,
+                             subcategory?, note?, mode?, paidBy (uid), tags[], receiptPath?,
                              recurringId?, source ('manual'|'recurring'|'import'),
                              createdBy, createdAt, updatedAt
 money_months/{monthKey}      incomePaise, expensePaise, savingPaise,

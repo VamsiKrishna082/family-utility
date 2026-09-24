@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { X, Plus, CreditCard } from "lucide-react";
-import { parseRupeesToPaise } from "@/lib/money";
+import { normalizeSubcategory, parseRupeesToPaise } from "@/lib/money";
 import { MONEY_MODES, type MoneyCard, type MoneyCardsResponse, type MoneyCategory, type MoneyTx, type MoneyTxType } from "@/lib/types";
 
 const fetcher = async (url: string) => {
@@ -50,7 +50,13 @@ export function MoneyQuickAdd({
 }) {
   const [type, setType] = useState<MoneyTxType>(editing?.type ?? "expense");
   const [amount, setAmount] = useState(editing ? String(editing.amountPaise / 100) : "");
-  const [categoryId, setCategoryId] = useState<string | null>(editing?.categoryId ?? null);
+  const [categoryId, setCategoryIdRaw] = useState<string | null>(editing?.categoryId ?? null);
+  const [subcategory, setSubcategory] = useState(editing?.subcategory ?? "");
+  // A sub-category belongs to its category — switching category starts it fresh.
+  const setCategoryId = (id: string | null) => {
+    if (id !== categoryId) setSubcategory("");
+    setCategoryIdRaw(id);
+  };
   const [note, setNote] = useState(editing?.note ?? "");
   const [date, setDate] = useState(editing?.date ?? todayISO());
   const [mode, setMode] = useState<(typeof MONEY_MODES)[number] | "">(editing?.mode && editing.mode !== "credit_card" ? editing.mode : "");
@@ -75,7 +81,9 @@ export function MoneyQuickAdd({
     [categories, type],
   );
   const quick = forType.slice(0, 8);
-  const selectedCategoryName = forType.find((c) => c.id === categoryId)?.name ?? categories.find((c) => c.id === categoryId)?.name;
+  const selectedCategory = forType.find((c) => c.id === categoryId) ?? categories.find((c) => c.id === categoryId);
+  const selectedCategoryName = selectedCategory?.name;
+  const knownSubcategories = selectedCategory?.subcategories ?? [];
   const isCreditCardPaymentCategory = type === "expense" && !ccSpend && selectedCategoryName?.toLowerCase() === "credit card";
   const showCardPicker = ccSpend || isCreditCardPaymentCategory;
 
@@ -135,6 +143,8 @@ export function MoneyQuickAdd({
     try {
       const body = {
         type, amountPaise, categoryId, date, note,
+        // null (not undefined) on edit so clearing the field actually clears it server-side.
+        subcategory: normalizeSubcategory(subcategory, knownSubcategories) ?? (editing ? null : undefined),
         mode: ccSpend ? "credit_card" : (mode || undefined),
         cardId: showCardPicker && cardId ? cardId : (editing?.cardId ? null : undefined),
         tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
@@ -143,10 +153,13 @@ export function MoneyQuickAdd({
         ? await fetch(`/api/money/tx/${editing.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
         : await fetch("/api/money/tx", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not save");
+      // A new sub-category gets remembered on its category server-side — refetch so its chip shows next time.
+      if (subcategory.trim()) globalMutate("/api/money/categories");
       onSaved();
       if (again && !editing) {
         setAmount("");
         setCategoryId(null);
+        setSubcategory("");
         setNote("");
         setTagsInput("");
       } else {
@@ -268,6 +281,44 @@ export function MoneyQuickAdd({
               <option value="">More categories…</option>
               {forType.slice(8).map((c) => <option key={c.id} value={c.id}>{c.group} · {c.name}</option>)}
             </select>
+          )}
+
+          {categoryId && (
+            <div className="mb-4">
+              <p style={{ fontSize: 12.5, color: "var(--faint)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                Sub-category <span style={{ textTransform: "none", fontWeight: 400 }}>(optional)</span>
+              </p>
+              {knownSubcategories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {knownSubcategories.map((sc) => {
+                    const on = subcategory.trim().toLowerCase() === sc.toLowerCase();
+                    return (
+                      <button
+                        key={sc}
+                        onClick={() => setSubcategory(on ? "" : sc)}
+                        style={{
+                          padding: "6px 11px", borderRadius: 999, fontSize: 12.5,
+                          border: `1px solid ${on ? "var(--indigo)" : "var(--line)"}`,
+                          background: on ? "var(--indigo)" : "var(--card)",
+                          color: on ? "#fff" : "var(--ink)",
+                        }}
+                      >
+                        {sc}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <input
+                type="text"
+                maxLength={60}
+                placeholder={`e.g. ${selectedCategoryName?.toLowerCase().includes("food") ? "Elanir, Cake, Snacks" : "a finer label within " + (selectedCategoryName ?? "this category")}`}
+                value={subcategory}
+                onChange={(e) => setSubcategory(e.target.value)}
+                className="w-full"
+                style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 13.5 }}
+              />
+            </div>
           )}
 
           {type === "expense" && (

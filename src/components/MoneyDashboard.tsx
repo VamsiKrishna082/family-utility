@@ -54,6 +54,7 @@ export function MoneyDashboard() {
 
   const displayMonth = viewMonth ?? data?.monthKey ?? null;
   const categories = catData?.items ?? [];
+  const categoryLabel = (tx: MoneyTx) => [categories.find((c) => c.id === tx.categoryId)?.name ?? "—", tx.subcategory].filter(Boolean).join(" · ");
   const savingCategories = useMemo(() => categories.filter((c) => c.type === "saving" && !c.archived), [categories]);
 
   // Every category this month actually has expense OR saving/investment
@@ -180,7 +181,7 @@ export function MoneyDashboard() {
             <div key={tx.id} className="flex items-center gap-3 py-2.5" style={{ borderTop: i === 0 ? "none" : "1px solid var(--line2)" }}>
               <span style={{ width: 7, height: 7, borderRadius: 7, background: typeColor[tx.type], flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, color: "var(--faint)", width: 38, flexShrink: 0 }}>{tx.date.slice(5)}</span>
-              <span className="truncate" style={{ fontSize: 14, width: 140, flexShrink: 0 }}>{categories.find((c) => c.id === tx.categoryId)?.name ?? "—"}</span>
+              <span className="truncate" style={{ fontSize: 14, width: 140, flexShrink: 0 }}>{categoryLabel(tx)}</span>
               <span className="truncate flex-1" style={{ fontSize: 13, color: "var(--dim)" }}>{tx.note}</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: typeColor[tx.type], flexShrink: 0 }}>
                 {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}{formatPaise(tx.amountPaise)}
@@ -198,7 +199,7 @@ export function MoneyDashboard() {
             <p style={{ color: "var(--faint)", fontSize: 14 }}>Nothing yet this month.</p>
           ) : (
             spentByCategory.map((row) => (
-              <div key={row.id} className="mb-3 last:mb-0">
+              <Link key={row.id} href={`/money/category/${row.id}?month=${data.monthKey}`} className="block mb-3 last:mb-0">
                 <div className="flex justify-between" style={{ fontSize: 13, marginBottom: 4 }}>
                   <span className="flex items-center gap-1.5">
                     {row.name}
@@ -215,12 +216,13 @@ export function MoneyDashboard() {
                       </span>
                     )}
                     <span style={{ color: "var(--faint)" }}>{formatPaiseExact(row.spentPaise)}</span>
+                    <ChevronRight size={13} color="var(--faint)" />
                   </span>
                 </div>
                 <div style={{ height: 6, background: "var(--line2)", borderRadius: 6 }}>
                   <div style={{ height: 6, width: `${maxSpent > 0 ? (row.spentPaise / maxSpent) * 100 : 0}%`, background: row.type === "saving" ? "var(--indigo)" : "var(--red)", borderRadius: 6, transition: "width .3s ease" }} />
                 </div>
-              </div>
+              </Link>
             ))
           )}
         </div>
@@ -259,7 +261,7 @@ export function MoneyDashboard() {
                 {i + 1}
               </span>
               <span style={{ fontSize: 12.5, color: "var(--faint)", width: 38, flexShrink: 0 }}>{tx.date.slice(5)}</span>
-              <span className="truncate" style={{ fontSize: 14, width: 140, flexShrink: 0 }}>{categories.find((c) => c.id === tx.categoryId)?.name ?? "—"}</span>
+              <span className="truncate" style={{ fontSize: 14, width: 140, flexShrink: 0 }}>{categoryLabel(tx)}</span>
               <span className="truncate flex-1" style={{ fontSize: 13, color: "var(--dim)" }}>{tx.note}</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: "var(--red)", flexShrink: 0 }}>{formatPaise(tx.amountPaise)}</span>
             </div>

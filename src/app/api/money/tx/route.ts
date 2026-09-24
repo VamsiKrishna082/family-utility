@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { FieldValue } from "@google-cloud/firestore";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
+import { normalizeSubcategory } from "@/lib/money";
 import { applyTxDelta, computeMonthKey, getSettings } from "@/lib/moneyEngine";
 import { MONEY_MODES, MONEY_TX_TYPES, type MoneyCategory, type MoneyTx } from "@/lib/types";
 
@@ -40,7 +42,7 @@ export async function GET(req: Request) {
     // always pair it with a month filter, which already bounds the result set).
     if (type) items = items.filter((tx) => tx.type === type);
     if (tag) items = items.filter((tx) => tx.tags?.includes(tag));
-    if (q) items = items.filter((tx) => tx.note?.toLowerCase().includes(q));
+    if (q) items = items.filter((tx) => tx.note?.toLowerCase().includes(q) || tx.subcategory?.toLowerCase().includes(q));
 
     return ok({ items, nextCursor: hasMore ? snap.docs[LIST_LIMIT - 1].id : null });
   } catch (e) {
@@ -53,6 +55,7 @@ const Body = z.object({
   amountPaise: z.number().int().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   categoryId: z.string().min(1),
+  subcategory: z.string().max(60).optional(),
   note: z.string().max(300).default(""),
   mode: z.enum(MONEY_MODES).optional(),
   cardId: z.string().optional(),
@@ -69,6 +72,7 @@ export async function POST(req: Request) {
     const catSnap = await db().collection("money_categories").doc(body.categoryId).get();
     if (!catSnap.exists) throw new Error("Unknown category");
     const category = catSnap.data() as MoneyCategory;
+    const subcategory = normalizeSubcategory(body.subcategory, category.subcategories);
 
     const settings = await getSettings();
     const monthKey = computeMonthKey(body.date, settings.monthStartDay);
@@ -82,6 +86,7 @@ export async function POST(req: Request) {
       date: body.date,
       monthKey,
       categoryId: body.categoryId,
+      subcategory,
       note: body.note,
       mode: body.mode,
       cardId: body.cardId,
@@ -99,6 +104,9 @@ export async function POST(req: Request) {
       // doc's own write comes after, not before, that call.
       await applyTxDelta(t, monthKey, { type: tx.type, amountPaise: tx.amountPaise, group: category.group, categoryId: tx.categoryId, mode: tx.mode }, 1);
       t.set(txRef, tx);
+      if (subcategory && !category.subcategories?.includes(subcategory)) {
+        t.set(catSnap.ref, { subcategories: FieldValue.arrayUnion(subcategory) }, { merge: true });
+      }
     });
 
     return ok({ tx });

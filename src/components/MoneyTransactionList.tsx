@@ -113,7 +113,7 @@ export function MoneyTransactionList({ initialMonth, initialType }: { initialMon
         <div className="flex items-center gap-2 card flex-1" style={{ padding: "6px 10px", minWidth: 160 }}>
           <Search size={14} color="var(--faint)" />
           <input
-            value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes"
+            value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes & sub-categories"
             className="flex-1 outline-none" style={{ fontSize: 13.5, background: "transparent" }}
           />
         </div>
@@ -129,7 +129,7 @@ export function MoneyTransactionList({ initialMonth, initialType }: { initialMon
             <div key={tx.id} className="group flex items-center gap-3 px-4 py-3" style={{ borderTop: i === 0 ? "none" : "1px solid var(--line2)" }}>
               <span style={{ width: 8, height: 8, borderRadius: 8, background: typeColor[tx.type], flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, color: "var(--faint)", width: 44, flexShrink: 0 }}>{tx.date.slice(5)}</span>
-              <span className="truncate" style={{ fontSize: 14, width: 150, flexShrink: 0 }}>{categoryName.get(tx.categoryId) ?? "—"}</span>
+              <span className="truncate" style={{ fontSize: 14, width: 150, flexShrink: 0 }}>{[categoryName.get(tx.categoryId) ?? "—", tx.subcategory].filter(Boolean).join(" · ")}</span>
               <span className="truncate flex-1" style={{ fontSize: 13.5, color: "var(--dim)" }}>{tx.note}</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: typeColor[tx.type], flexShrink: 0 }}>
                 {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}{formatPaise(tx.amountPaise)}

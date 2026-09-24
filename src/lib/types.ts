@@ -82,6 +82,8 @@ export type MoneyCategory = {
   archived: boolean;
   /** How many transactions have used this category — drives the quick-add grid's "most used first" ordering. */
   useCount: number;
+  /** Sub-categories used under this one so far (e.g. Food → Elanir, Cake) — appended to whenever an entry names a new one, offered as chips in quick-add. */
+  subcategories?: string[];
 };
 
 export type MoneyTx = {
@@ -92,6 +94,8 @@ export type MoneyTx = {
   /** Computed server-side from date + money_settings.monthStartDay — the client never sets this. */
   monthKey: string; // yyyy-mm
   categoryId: string;
+  /** Optional finer label within the category (Food → "Elanir"). Totals still roll up by categoryId; this only drives the category drill-down. */
+  subcategory?: string;
   note: string;
   mode?: MoneyMode;
   /** Which card — set for both a credit-card swipe (mode: 'credit_card') and a bill payment against that card (any other mode). */

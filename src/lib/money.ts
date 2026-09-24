@@ -46,3 +46,14 @@ export function parseRupeesToPaise(input: string): number | null {
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.round(n * 100);
 }
+
+/**
+ * Trims a typed sub-category and snaps it to an existing one's spelling when
+ * they match case-insensitively, so "elanir" and "Elanir " total together in
+ * the category drill-down instead of showing as two rows. Empty -> undefined.
+ */
+export function normalizeSubcategory(input: string | null | undefined, existing: string[] = []): string | undefined {
+  const trimmed = (input ?? "").trim().replace(/\s+/g, " ");
+  if (!trimmed) return undefined;
+  return existing.find((s) => s.toLowerCase() === trimmed.toLowerCase()) ?? trimmed;
+}

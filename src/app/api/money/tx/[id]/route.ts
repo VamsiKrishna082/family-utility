@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { FieldValue } from "@google-cloud/firestore";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
+import { normalizeSubcategory } from "@/lib/money";
 import { applyMonthDeltas, applyTxDelta, applyTxDeltas, computeMonthKey, getSettings, type TxDeltaInput } from "@/lib/moneyEngine";
 import { MONEY_MODES, MONEY_TX_TYPES, type MoneyCategory, type MoneyTx } from "@/lib/types";
 
@@ -12,6 +14,8 @@ const Body = z.object({
   amountPaise: z.number().int().positive().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   categoryId: z.string().min(1).optional(),
+  /** null clears it; omitted keeps the current one unless the category changed (a sub-category belongs to its category). */
+  subcategory: z.string().max(60).nullable().optional(),
   note: z.string().max(300).optional(),
   mode: z.enum(MONEY_MODES).optional(),
   cardId: z.string().nullable().optional(),
@@ -49,6 +53,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       ]);
       const oldGroup = (oldCatSnap.data() as MoneyCategory | undefined)?.group ?? "Miscellaneous";
       const newGroup = categoryChanged ? ((newCatSnap!.data() as MoneyCategory | undefined)?.group ?? "Miscellaneous") : oldGroup;
+      const newCatSnapResolved = categoryChanged ? newCatSnap! : oldCatSnap;
+      const newCatSubs = (newCatSnapResolved.data() as MoneyCategory | undefined)?.subcategories ?? [];
+      const subcategory = patch.subcategory === null
+        ? undefined
+        : patch.subcategory !== undefined
+          ? normalizeSubcategory(patch.subcategory, newCatSubs)
+          : categoryChanged ? undefined : oldTx.subcategory;
 
       const newTx: MoneyTx = {
         ...oldTx,
@@ -56,6 +67,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         amountPaise: patch.amountPaise ?? oldTx.amountPaise,
         date: patch.date ?? oldTx.date,
         categoryId: newCategoryId,
+        subcategory,
         note: patch.note ?? oldTx.note,
         mode: patch.mode ?? oldTx.mode,
         cardId: patch.cardId === null ? undefined : (patch.cardId ?? oldTx.cardId),
@@ -78,6 +90,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
 
       t.set(txRef, newTx);
+      if (subcategory && newCatSnapResolved.exists && !newCatSubs.includes(subcategory)) {
+        t.set(newCatSnapResolved.ref, { subcategories: FieldValue.arrayUnion(subcategory) }, { merge: true });
+      }
     });
 
     return ok({ id });

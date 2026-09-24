@@ -90,21 +90,6 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
   const photoCount = useMemo(() => media.filter((m) => m.kind === "photo").length, [media]);
   const videoCount = useMemo(() => media.filter((m) => m.kind === "video").length, [media]);
 
-  /** media is already newest-taken-first (sortEntries), so a single pass groups it into contiguous month buckets. */
-  const groupedMedia = useMemo(() => {
-    const groups: { label: string; items: Entry[] }[] = [];
-    for (const m of media) {
-      const d = new Date(m.createdTime);
-      const label = Number.isNaN(d.getTime())
-        ? "Undated"
-        : d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-      const last = groups[groups.length - 1];
-      if (last && last.label === label) last.items.push(m);
-      else groups.push({ label, items: [m] });
-    }
-    return groups;
-  }, [media]);
-
   const handleFiles = useCallback(
     async (list: FileList | null) => {
       if (!list?.length) return;
@@ -835,27 +820,22 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
               </p>
             </div>
           ) : (
-            groupedMedia.map((group) => (
-              <div key={group.label} className="mb-8 last:mb-0">
-                <p style={{ color: "var(--dim)", fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>{group.label}</p>
-                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
-                  {group.items.map((m) => (
-                    <Thumb
-                      key={m.id}
-                      item={m}
-                      onOpen={() => openAt(m)}
-                      onDelete={() => handleDelete(m)}
-                      onToggleFavorite={() => toggleFavorite(m)}
-                      onSetCover={() => setCover(m)}
-                      onMove={() => setMoveTarget(m)}
-                      selectMode={selectMode}
-                      selected={selectedIds.has(m.id)}
-                      onToggleSelect={() => toggleSelect(m.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
+            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))" }}>
+              {media.map((m) => (
+                <Thumb
+                  key={m.id}
+                  item={m}
+                  onOpen={() => openAt(m)}
+                  onDelete={() => handleDelete(m)}
+                  onToggleFavorite={() => toggleFavorite(m)}
+                  onSetCover={() => setCover(m)}
+                  onMove={() => setMoveTarget(m)}
+                  selectMode={selectMode}
+                  selected={selectedIds.has(m.id)}
+                  onToggleSelect={() => toggleSelect(m.id)}
+                />
+              ))}
+            </div>
           )}
 
           </div>
