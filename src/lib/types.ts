@@ -246,9 +246,9 @@ export type NwAccount = {
   navCode?: string;
   investedPaise?: number; // MFs/stocks: cost basis, for a gain% sub-label
   loan?: { emiPaise: number; ratePct: number; endDate: string };
-  /** Surfaces Money's "left to spend" for this month as a suggested (never auto-written) value on the update form — see networth.md's "balances always entered by hand" principle. */
+  /** This account's value follows Money's "left to spend" for the month automatically (written into the current month's snapshot, no manual entry). */
   linkedToMoneyLeftover?: boolean;
-  /** Same suggestion mechanism, sourced from a Money goal's savedPaise instead — e.g. an "Emergency Fund" account tracking a Money goal of the same name. Mutually exclusive with linkedToMoneyLeftover in practice, not enforced, since only one can ever produce the suggestion actually shown. */
+  /** Same, following a Money goal's savedPaise — e.g. an "Emergency Fund" account tracking the Money goal of that name. If both links are set, the leftover wins. */
   linkedToMoneyGoalId?: string;
   archived: boolean;
   order: number;
@@ -323,9 +323,13 @@ export type NwUpdateRow = {
   account: NwAccount;
   previousValuePaise: number | null;
   currentValuePaise: number | null; // pre-filled from previous month if this month isn't saved yet
-  /** Only set when account.linkedToMoneyLeftover — Money's leftPaise for this month, offered as a one-tap fill-in, never auto-applied. */
-  suggestedValuePaise: number | null;
+  /** Set for accounts whose value is filled automatically (Money leftover, a Money goal, or gold items × today's rate) — shown read-only, never typed. */
+  autoValuePaise: number | null;
+  autoSource: NwAutoSource | null;
 };
+
+/** Where an automatically filled account value comes from. */
+export type NwAutoSource = "money_leftover" | "money_goal" | "gold_items";
 export type NwUpdateResponse = { monthKey: string; rows: NwUpdateRow[] };
 
 export type NwTrendPoint = { monthKey: string; netPaise: number; liabilitiesPaise: number; hasData: boolean };

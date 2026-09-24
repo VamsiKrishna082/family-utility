@@ -132,38 +132,41 @@ export function NetWorthUpdateForm({ initialMonth }: { initialMonth: string | nu
                           <p style={{ fontSize: 11.5, color: "var(--faint)" }}>Last month: {formatPaiseExact(row.previousValuePaise)}</p>
                         )}
                       </div>
-                      {row.suggestedValuePaise !== null && (
-                        <button
-                          className="btn btn-plain hidden sm:flex items-center gap-1"
-                          style={{ padding: "6px 10px", fontSize: 12, color: "var(--indigo)" }}
-                          title="Suggested value — review before saving"
-                          onClick={() => setDrafts((d) => ({ ...d, [row.account.id]: String(row.suggestedValuePaise! / 100) }))}
-                        >
-                          <Sparkles size={12} />
-                          Use {row.account.linkedToMoneyGoalId
-                            ? goals.find((g) => g.id === row.account.linkedToMoneyGoalId)?.name ?? "goal"
-                            : row.account.assetClass === "gold"
-                              ? "today's gold value"
-                              : "Money's left"} ({formatPaiseExact(row.suggestedValuePaise)})
-                        </button>
+                      {row.autoSource ? (
+                        <div className="flex items-center gap-2" title="Filled in automatically — no need to type it">
+                          <span className="hidden sm:flex items-center gap-1" style={{ fontSize: 12, color: "var(--indigo)", fontWeight: 600 }}>
+                            <Sparkles size={12} />
+                            Auto · {row.autoSource === "money_goal"
+                              ? goals.find((g) => g.id === row.account.linkedToMoneyGoalId)?.name ?? "Money goal"
+                              : row.autoSource === "gold_items"
+                                ? "today's gold rate"
+                                : "Money's left"}
+                          </span>
+                          <span style={{ width: 130, padding: "8px 10px", fontSize: 14, textAlign: "right", fontWeight: 600, borderRadius: 10, background: "var(--line2)" }}>
+                            {formatPaiseExact(row.autoValuePaise ?? 0)}
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          {row.previousValuePaise !== null && (
+                            <button
+                              className="btn btn-plain hidden sm:block"
+                              style={{ padding: "6px 10px", fontSize: 12 }}
+                              onClick={() => setDrafts((d) => ({ ...d, [row.account.id]: String(row.previousValuePaise! / 100) }))}
+                            >
+                              Same as last month
+                            </button>
+                          )}
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            placeholder="₹0"
+                            value={valueFor(row.account.id, row.currentValuePaise)}
+                            onChange={(e) => setDrafts((d) => ({ ...d, [row.account.id]: e.target.value }))}
+                            style={{ width: 130, borderRadius: 10, border: "1px solid var(--line)", padding: "8px 10px", fontSize: 14, textAlign: "right" }}
+                          />
+                        </>
                       )}
-                      {row.previousValuePaise !== null && (
-                        <button
-                          className="btn btn-plain hidden sm:block"
-                          style={{ padding: "6px 10px", fontSize: 12 }}
-                          onClick={() => setDrafts((d) => ({ ...d, [row.account.id]: String(row.previousValuePaise! / 100) }))}
-                        >
-                          Same as last month
-                        </button>
-                      )}
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        placeholder="₹0"
-                        value={valueFor(row.account.id, row.currentValuePaise)}
-                        onChange={(e) => setDrafts((d) => ({ ...d, [row.account.id]: e.target.value }))}
-                        style={{ width: 130, borderRadius: 10, border: "1px solid var(--line)", padding: "8px 10px", fontSize: 14, textAlign: "right" }}
-                      />
                       <button
                         aria-label="Account settings"
                         onClick={() => setExpandedId(expandedId === row.account.id ? null : row.account.id)}
@@ -176,7 +179,7 @@ export function NetWorthUpdateForm({ initialMonth }: { initialMonth: string | nu
                     {expandedId === row.account.id && (
                       <div className="flex items-center gap-3 px-3 pb-3" style={{ flexWrap: "wrap", paddingLeft: group.rows.length > 1 ? 20 : 12 }}>
                         <label className="flex items-center gap-2" style={{ fontSize: 12.5, color: "var(--dim)" }}>
-                          Suggest a value from
+                          Fill automatically from
                           <select
                             value={row.account.linkedToMoneyLeftover ? "leftover" : row.account.linkedToMoneyGoalId ? `goal:${row.account.linkedToMoneyGoalId}` : "none"}
                             onChange={(e) => {

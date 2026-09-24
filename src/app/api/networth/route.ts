@@ -1,9 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
-import { effectiveGoldItemValuePaise, getGoldRate } from "@/lib/goldPrice";
-import { computeTotals, currentMonthKey, getAccounts, previousMonthKey, shiftMonthKey } from "@/lib/networthEngine";
-import type { NwAccount, NwAccountRow, NwGoldItem, NwSettings, NwSnapshot, NwTrendPoint } from "@/lib/types";
+import { computeTotals, currentMonthKey, getAccounts, previousMonthKey, shiftMonthKey, syncAutoValues } from "@/lib/networthEngine";
+import type { NwAccount, NwAccountRow, NwSettings, NwSnapshot, NwTrendPoint } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -27,6 +26,11 @@ export async function GET(req: Request) {
     const cur = currentMonthKey();
     const monthKey = url.searchParams.get("month") ?? cur;
     const prevKey = previousMonthKey(monthKey);
+
+    // Automatic accounts (Money leftover, a Money goal, gold items × today's
+    // rate) are written into the current month's snapshot before it's read,
+    // so the page, the totals and the saved history all agree — no manual step.
+    await syncAutoValues(monthKey);
 
     const trendKeys: string[] = [];
     for (let i = 11; i >= 0; i--) trendKeys.push(shiftMonthKey(monthKey, -i));
@@ -57,28 +61,6 @@ export async function GET(req: Request) {
     const thisValues = thisSnap.exists ? (thisSnap.data() as NwSnapshot).values : {};
     const prevValues = prevSnap.exists ? (prevSnap.data() as NwSnapshot).values : {};
 
-    // Gold, per networth.md, is one of the "quantity x price" assets that's
-    // meant to refresh automatically — unlike a hand-typed balance. Only for
-    // the real current month (never a past month being browsed, since its
-    // item list may have changed since then): any Gold account with items
-    // tracked on the Gold detail page shows their live computed total here
-    // directly, with no separate manual save required. It still isn't
-    // written to nw_snapshots — Update Balances' "Use today's gold value"
-    // is what makes it permanent history for the month.
-    const goldAccountIds = accounts.filter((a) => a.assetClass === "gold" && !a.archived).map((a) => a.id);
-    const goldLiveValueByAccount = new Map<string, number>();
-    if (goldAccountIds.length > 0 && monthKey === cur) {
-      const [goldItemsSnap, goldRate] = await Promise.all([
-        db().collection("nw_gold_items").where("accountId", "in", goldAccountIds.slice(0, 10)).get(),
-        getGoldRate(),
-      ]);
-      for (const doc of goldItemsSnap.docs) {
-        const item = doc.data() as NwGoldItem;
-        const value = effectiveGoldItemValuePaise(item, goldRate);
-        if (value !== null) goldLiveValueByAccount.set(item.accountId, (goldLiveValueByAccount.get(item.accountId) ?? 0) + value);
-      }
-    }
-
     const accountRows: NwAccountRow[] = accounts
       .filter((a) => !a.archived)
       .map((account) => {
@@ -94,17 +76,6 @@ export async function GET(req: Request) {
         }
         const thisVal = thisValues[account.id];
         const prevVal = prevValues[account.id];
-
-        const liveGold = goldLiveValueByAccount.get(account.id);
-        if (liveGold !== undefined) {
-          return {
-            account,
-            valuePaise: liveGold,
-            valueMonthKey: monthKey,
-            isStale: false,
-            changeThisMonthPaise: prevVal !== undefined ? liveGold - prevVal : null,
-          };
-        }
 
         return {
           account,

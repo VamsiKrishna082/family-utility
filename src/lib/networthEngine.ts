@@ -1,6 +1,6 @@
 import { db } from "@/lib/firestore";
 import { effectiveGoldItemValuePaise, getGoldRate } from "@/lib/goldPrice";
-import type { MoneyMonthSummary, NwAccount, NwGoldItem, NwSnapshot, NwUpdateRow } from "@/lib/types";
+import type { MoneyMonthSummary, NwAccount, NwAutoSource, NwGoldItem, NwSnapshot, NwUpdateRow } from "@/lib/types";
 
 export function previousMonthKey(monthKey: string): string {
   const [y, m] = monthKey.split("-").map(Number);
@@ -112,19 +112,84 @@ export async function saveSnapshotValues(monthKey: string, partialValues: Record
   });
 }
 
+/** Who a snapshot value is attributed to when the app filled it in itself. */
+export const AUTO_ENTERED_BY = "auto";
+
+export type AutoValue = { valuePaise: number; source: NwAutoSource };
+
+/**
+ * Values the app fills in by itself — no manual entry:
+ *  - linkedToMoneyLeftover: Money's leftPaise for this month (money_months/{monthKey}),
+ *  - linkedToMoneyGoalId:   that Money goal's savedPaise,
+ *  - gold accounts with tracked items: Σ grams × today's rate for each item's karat.
+ * An account with no source value yet (e.g. no Money summary this month, or
+ * no gold items) is simply absent, and stays a normal hand-entered row.
+ * Money's month and Net Worth's month use the same literal "YYYY-MM" key; if
+ * Money's monthStartDay isn't 1 the two months don't line up exactly.
+ */
+export async function computeAutoValues(accounts: NwAccount[], monthKey: string): Promise<Map<string, AutoValue>> {
+  const live = accounts.filter((a) => !a.archived);
+  const out = new Map<string, AutoValue>();
+
+  const leftoverAccounts = live.filter((a) => a.linkedToMoneyLeftover);
+  const goalAccounts = live.filter((a) => !a.linkedToMoneyLeftover && a.linkedToMoneyGoalId);
+  const goldAccountIds = live.filter((a) => a.assetClass === "gold" && !a.linkedToMoneyLeftover && !a.linkedToMoneyGoalId).map((a) => a.id);
+
+  const [moneyLeftPaise, goalSnaps, gold] = await Promise.all([
+    leftoverAccounts.length
+      ? db().collection("money_months").doc(monthKey).get().then((d) => (d.exists ? (d.data() as MoneyMonthSummary).leftPaise : null))
+      : Promise.resolve(null),
+    Promise.all([...new Set(goalAccounts.map((a) => a.linkedToMoneyGoalId!))].map((id) => db().collection("money_goals").doc(id).get())),
+    goldAccountIds.length
+      ? Promise.all([db().collection("nw_gold_items").where("accountId", "in", goldAccountIds.slice(0, 10)).get(), getGoldRate()])
+      : Promise.resolve(null),
+  ]);
+
+  if (moneyLeftPaise !== null) for (const a of leftoverAccounts) out.set(a.id, { valuePaise: moneyLeftPaise, source: "money_leftover" });
+
+  const goalSaved = new Map(goalSnaps.filter((g) => g.exists).map((g) => [g.id, g.data()!.savedPaise as number]));
+  for (const a of goalAccounts) {
+    const v = goalSaved.get(a.linkedToMoneyGoalId!);
+    if (v !== undefined) out.set(a.id, { valuePaise: v, source: "money_goal" });
+  }
+
+  if (gold) {
+    const [itemsSnap, rate] = gold;
+    const byAccount = new Map<string, number>();
+    for (const doc of itemsSnap.docs) {
+      const item = doc.data() as NwGoldItem;
+      const value = effectiveGoldItemValuePaise(item, rate);
+      if (value !== null) byAccount.set(item.accountId, (byAccount.get(item.accountId) ?? 0) + value);
+    }
+    for (const [id, v] of byAccount) out.set(id, { valuePaise: v, source: "gold_items" });
+  }
+  return out;
+}
+
+/**
+ * Writes the automatic values into the CURRENT month's snapshot — only the
+ * ones that actually changed, so viewing Net Worth doesn't write on every
+ * load. Past months are never touched: once a month is over, its last synced
+ * values are its history. Returns the account ids that are automatic.
+ */
+export async function syncAutoValues(monthKey: string): Promise<Map<string, AutoValue>> {
+  if (monthKey !== currentMonthKey()) return new Map();
+  const [accounts, snap] = await Promise.all([getAccounts(), getSnapshot(monthKey)]);
+  const auto = await computeAutoValues(accounts, monthKey);
+  const changed: Record<string, number> = {};
+  for (const [id, { valuePaise }] of auto) {
+    if (snap?.values[id] !== valuePaise) changed[id] = valuePaise;
+  }
+  if (Object.keys(changed).length) await saveSnapshotValues(monthKey, changed, AUTO_ENTERED_BY);
+  return auto;
+}
+
 /**
  * Rows for the update-balances form: previous month's value as a greyed
  * hint, and this month's value pre-filled from the previous month if this
- * month hasn't been saved yet at all — nothing is written by opening the
- * form, only by saving it.
- *
- * Accounts with linkedToMoneyLeftover also get a suggestedValuePaise, read
- * from Money's own money_months/{monthKey}.leftPaise — offered as a
- * one-tap fill button in the UI, never auto-applied to the saved snapshot.
- * Uses the same literal monthKey string as Net Worth's calendar month;
- * if Money's monthStartDay isn't 1, Money's own month boundaries won't
- * line up with the calendar and this suggestion will be a rough one —
- * acceptable since it's only ever a suggestion, not a written value.
+ * month hasn't been saved yet — nothing is written by opening the form.
+ * Automatic accounts come back with autoValuePaise set (current month only)
+ * and are shown read-only.
  */
 export async function getUpdateFormRows(monthKey: string): Promise<NwUpdateRow[]> {
   const [accounts, thisSnap, prevSnap] = await Promise.all([
@@ -132,51 +197,15 @@ export async function getUpdateFormRows(monthKey: string): Promise<NwUpdateRow[]
     getSnapshot(monthKey),
     getSnapshot(previousMonthKey(monthKey)),
   ]);
-
-  const needsMoneyLeftover = accounts.some((a) => a.linkedToMoneyLeftover && !a.archived);
-  const moneyLeftPaise = needsMoneyLeftover
-    ? await db().collection("money_months").doc(monthKey).get().then((d) => (d.exists ? (d.data() as MoneyMonthSummary).leftPaise : null))
-    : null;
-
-  const goalIds = [...new Set(accounts.filter((a) => a.linkedToMoneyGoalId && !a.archived).map((a) => a.linkedToMoneyGoalId!))];
-  const goalSavedById = new Map<string, number>();
-  if (goalIds.length > 0) {
-    const goalSnaps = await Promise.all(goalIds.map((id) => db().collection("money_goals").doc(id).get()));
-    goalSnaps.forEach((snap, i) => {
-      if (snap.exists) goalSavedById.set(goalIds[i], snap.data()!.savedPaise as number);
-    });
-  }
-
-  // Gold accounts with items tracked in nw_gold_items get a suggested value
-  // = sum of (grams x today's rate for that item's karat) — same one-tap
-  // suggestion mechanism as the Money links above, never auto-applied.
-  const goldAccountIds = accounts.filter((a) => a.assetClass === "gold" && !a.archived).map((a) => a.id);
-  const goldValueByAccount = new Map<string, number>();
-  if (goldAccountIds.length > 0) {
-    const [itemsSnap, rate] = await Promise.all([
-      db().collection("nw_gold_items").where("accountId", "in", goldAccountIds.slice(0, 10)).get(),
-      getGoldRate(),
-    ]);
-    for (const doc of itemsSnap.docs) {
-      const item = doc.data() as NwGoldItem;
-      const value = effectiveGoldItemValuePaise(item, rate);
-      if (value !== null) goldValueByAccount.set(item.accountId, (goldValueByAccount.get(item.accountId) ?? 0) + value);
-    }
-  }
+  const auto = monthKey === currentMonthKey() ? await computeAutoValues(accounts, monthKey) : new Map<string, AutoValue>();
 
   return accounts
     .filter((a) => !a.archived)
     .map((account) => {
       const previousValuePaise = prevSnap?.values[account.id] ?? null;
-      const currentValuePaise = thisSnap?.values[account.id] ?? previousValuePaise;
-      const suggestedValuePaise = account.linkedToMoneyLeftover
-        ? moneyLeftPaise
-        : account.linkedToMoneyGoalId
-          ? (goalSavedById.get(account.linkedToMoneyGoalId) ?? null)
-          : goldValueByAccount.has(account.id)
-            ? goldValueByAccount.get(account.id)!
-            : null;
-      return { account, previousValuePaise, currentValuePaise, suggestedValuePaise };
+      const a = auto.get(account.id);
+      const currentValuePaise = a ? a.valuePaise : thisSnap?.values[account.id] ?? previousValuePaise;
+      return { account, previousValuePaise, currentValuePaise, autoValuePaise: a?.valuePaise ?? null, autoSource: a?.source ?? null };
     });
 }
 
