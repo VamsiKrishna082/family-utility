@@ -15,6 +15,7 @@ const MODEL = "claude-haiku-4-5";
 const Estimate = z.object({
   name: z.string().describe("Short dish name, e.g. 'Idli with sambar'"),
   servingLabel: z.string().describe("The whole amount described or shown, e.g. '2 idli + 1 katori sambar'"),
+  grams: z.number().describe("Approximate total weight of that amount in grams (liquids: 1 ml = 1 g)"),
   kcal: z.number(),
   protein: z.number(),
   carbs: z.number(),
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
       name: est.name,
       source: "ai",
       baseLabel: est.servingLabel,
+      ...(est.grams > 0 ? { gramsPerBase: Math.round(est.grams) } : {}),
       base: { kcal: Math.round(Math.max(0, est.kcal)), protein: r1(est.protein), carbs: r1(est.carbs), fat: r1(est.fat), fibre: r1(est.fibre) },
       servings: [{ label: est.servingLabel, mult: 1 }, { label: "Half of that", mult: 0.5 }],
       confidence: est.confidence,

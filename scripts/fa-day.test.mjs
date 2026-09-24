@@ -64,3 +64,11 @@ test("scaling and burn estimate", () => {
   assert.equal(burnedKcal({ steps: 10000, workoutMin: 0, weightKg: 70 }), 350);
   assert.ok(burnedKcal({ steps: 0, workoutMin: 30, activity: "run", weightKg: 70 }) > 250);
 });
+
+test("logging by grams scales from the food's weight per unit", () => {
+  // Idli: 58 kcal per piece, a piece ≈ 40 g → 100 g ≈ 145 kcal; re-weighing 100 g → 150 g scales the same way.
+  const idli = { kcal: 58, protein: 2, carbs: 12, fat: 0.2, fibre: 0.6 };
+  const g100 = scaleNutrition(idli, 100 / 40);
+  assert.equal(g100.kcal, 145);
+  assert.equal(scaleNutrition(g100, 150 / 100).kcal, 218);
+});

@@ -72,6 +72,10 @@ export function AddFoodSheet({
   const [selected, setSelected] = useState<FaFood | null>(null);
   const [servingIdx, setServingIdx] = useState(0);
   const [qty, setQty] = useState(1);
+  // Logging by weight: the "Grams" serving. gramMult is the last valid grams ÷ gramsPerBase.
+  const [byGrams, setByGrams] = useState(false);
+  const [gramsInput, setGramsInput] = useState("");
+  const [gramMult, setGramMult] = useState(1);
   const [fields, setFields] = useState<Fields | null>(null);
   const [edited, setEdited] = useState(false);
   const [resetToSource, setResetToSource] = useState(false);
@@ -81,6 +85,8 @@ export function AddFoodSheet({
   const [custom, setCustom] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customServing, setCustomServing] = useState("1 serving");
+  /** "Enter your own": numbers per serving, or per 100 g plus how many grams you ate. */
+  const [customPer100, setCustomPer100] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
 
@@ -92,14 +98,26 @@ export function AddFoodSheet({
   const { data: quick } = useSWR<FaQuickResponse>(`/api/fa/quick?date=${date}&meal=${meal}`, getJson);
   const results = barcodeResults ?? (dq.length >= 2 ? search?.results ?? [] : []);
 
-  const serving = selected?.servings[servingIdx] ?? selected?.servings[0];
+  const gpb = selected?.gramsPerBase;
+  const gramsN = Number(gramsInput) || 0;
+  const serving = byGrams && gpb
+    ? { label: `${Math.round(gramMult * gpb)} g`, mult: gramMult }
+    : selected?.servings[servingIdx] ?? selected?.servings[0];
   const perServing = fields ? fromFields(fields) : null;
-  const total = perServing ? scaleNutrition(perServing, qty) : null;
+  const customGramsMult = custom && customPer100 ? gramsN / 100 : null;
+  const total = perServing ? scaleNutrition(perServing, customGramsMult ?? qty) : null;
+  /** Total weight this entry represents, when the food's weight is known. */
+  const totalGrams = custom
+    ? (customPer100 && gramsN > 0 ? gramsN : undefined)
+    : gpb && serving ? Math.round(serving.mult * gpb * qty) : undefined;
+  const gramsInvalid = (byGrams || (custom && customPer100)) && !(gramsN > 0);
 
   const select = (food: FaFood) => {
     setSelected(food);
     setServingIdx(0);
     setQty(1);
+    setByGrams(false);
+    setGramsInput("");
     setFields(toFields(scaleNutrition(food.base, food.servings[0]?.mult ?? 1)));
     setEdited(false);
     setResetToSource(false);
@@ -114,9 +132,32 @@ export function AddFoodSheet({
     const prevMult = serving?.mult ?? 1;
     const nextMult = selected.servings[i].mult;
     setServingIdx(i);
+    setByGrams(false);
     // Keep any edits, rescaled to the new serving size.
     const base = perServing ? divide(perServing, prevMult) : selected.base;
     setFields(toFields(scaleNutrition(base, nextMult)));
+  };
+
+  /** Switch to logging by weight, starting from what the current serving × qty weighs. */
+  const pickGrams = () => {
+    if (!selected?.gramsPerBase || !serving || !perServing) return;
+    const start = Math.round(serving.mult * selected.gramsPerBase * qty);
+    const mult = start / selected.gramsPerBase;
+    setFields(toFields(scaleNutrition(divide(perServing, serving.mult), mult)));
+    setGramMult(mult);
+    setGramsInput(String(start));
+    setQty(1);
+    setByGrams(true);
+  };
+
+  const onGrams = (v: string) => {
+    const clean = v.replace(/[^0-9.]/g, "");
+    setGramsInput(clean);
+    const g = Number(clean);
+    if (!selected?.gramsPerBase || !perServing || !(g > 0)) return;
+    const mult = g / selected.gramsPerBase;
+    setFields(toFields(scaleNutrition(divide(perServing, gramMult), mult)));
+    setGramMult(mult);
   };
 
   const reset = () => {
@@ -145,7 +186,7 @@ export function AddFoodSheet({
   };
 
   const add = () => run("add", async () => {
-    if (!selected || !perServing || !total || !serving) return;
+    if (!selected || !perServing || !total || !serving || gramsInvalid) return;
     let food = selected;
     let overrideBase = edited ? divide(perServing, serving.mult) : undefined;
     // A "your version" row: always send the original food, plus your numbers
@@ -161,8 +202,9 @@ export function AddFoodSheet({
     }
     await send("/api/fa/entries", "POST", {
       date, meal, qty,
-      food: { key: food.key, name: food.name, brand: food.brand, barcode: food.barcode, source: food.source, baseLabel: food.baseLabel, base: food.base, servings: food.servings, confidence: food.confidence },
+      food: { key: food.key, name: food.name, brand: food.brand, barcode: food.barcode, source: food.source, baseLabel: food.baseLabel, gramsPerBase: food.gramsPerBase, base: food.base, servings: food.servings, confidence: food.confidence },
       servingLabel: serving.label,
+      grams: totalGrams,
       nutrition: total,
       overrideBase,
     });
@@ -170,13 +212,18 @@ export function AddFoodSheet({
   });
 
   const addCustom = () => run("add", async () => {
-    if (!perServing || !customName.trim()) return;
+    if (!perServing || !customName.trim() || gramsInvalid) return;
     const key = `yours:${customName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const food = customPer100
+      ? { key, name: customName.trim(), source: "yours", baseLabel: "100 g", gramsPerBase: 100, base: perServing, servings: [{ label: "100 g", mult: 1 }] }
+      : { key, name: customName.trim(), source: "yours", baseLabel: customServing || "1 serving", base: perServing, servings: [{ label: customServing || "1 serving", mult: 1 }] };
     await send("/api/fa/entries", "POST", {
-      date, meal, qty,
-      food: { key, name: customName.trim(), source: "yours", baseLabel: customServing || "1 serving", base: perServing, servings: [{ label: customServing || "1 serving", mult: 1 }] },
-      servingLabel: customServing || "1 serving",
-      nutrition: scaleNutrition(perServing, qty),
+      date, meal,
+      qty: customPer100 ? 1 : qty,
+      food,
+      servingLabel: customPer100 ? `${Math.round(gramsN)} g` : customServing || "1 serving",
+      grams: totalGrams,
+      nutrition: scaleNutrition(perServing, customPer100 ? gramsN / 100 : qty),
       overrideBase: perServing,
     });
     finish();
@@ -188,7 +235,7 @@ export function AddFoodSheet({
     setFavourite(next);
     await send("/api/fa/foods/favourite", "PUT", {
       on: next,
-      food: { key: selected.key, name: selected.name.replace(/ — your version$/, ""), brand: selected.brand, barcode: selected.barcode, source: sourceOfKey(selected.key), baseLabel: selected.baseLabel, base: selected.sourceBase ?? selected.base, servings: selected.servings },
+      food: { key: selected.key, name: selected.name.replace(/ — your version$/, ""), brand: selected.brand, barcode: selected.barcode, source: sourceOfKey(selected.key), baseLabel: selected.baseLabel, gramsPerBase: selected.gramsPerBase, base: selected.sourceBase ?? selected.base, servings: selected.servings },
     });
   });
 
@@ -206,6 +253,7 @@ export function AddFoodSheet({
       date, meal, qty: e.qty,
       food: { key: e.foodKey, name: e.name, source: e.source, baseLabel: e.servingLabel, base: unit, servings: [{ label: e.servingLabel, mult: 1 }] },
       servingLabel: e.servingLabel,
+      grams: e.grams,
       nutrition: { kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, fibre: e.fibre },
     });
     finish();
@@ -242,6 +290,8 @@ export function AddFoodSheet({
   const startCustom = () => {
     setSelected(null);
     setCustom(true);
+    setCustomPer100(false);
+    setGramsInput("");
     setCustomName(q.trim());
     setFields({ kcal: "", protein: "", carbs: "", fat: "", fibre: "" });
     setQty(1);
@@ -377,37 +427,103 @@ export function AddFoodSheet({
               <span className="fa-label">Serving</span>
               {selected ? (
                 <div className="flex flex-wrap" style={{ gap: 8 }}>
-                  {selected.servings.map((s, i) => (
+                  {selected.servings.map((s, i) => {
+                    const on = !byGrams && i === servingIdx;
+                    return (
+                      <button
+                        key={s.label}
+                        onClick={() => pickServing(i)}
+                        aria-pressed={on}
+                        style={{
+                          flexGrow: 1, minHeight: 44, padding: "0 12px", borderRadius: 12, fontSize: 14, fontWeight: 600,
+                          border: `1px solid ${on ? "var(--fa-ink)" : "var(--fa-line)"}`,
+                          background: on ? "var(--fa-ink)" : "#fff",
+                          color: on ? "#fff" : "var(--fa-ink)",
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                  {gpb && (
                     <button
-                      key={s.label}
-                      onClick={() => pickServing(i)}
+                      onClick={pickGrams}
+                      aria-pressed={byGrams}
                       style={{
                         flexGrow: 1, minHeight: 44, padding: "0 12px", borderRadius: 12, fontSize: 14, fontWeight: 600,
-                        border: `1px solid ${i === servingIdx ? "var(--fa-ink)" : "var(--fa-line)"}`,
-                        background: i === servingIdx ? "var(--fa-ink)" : "#fff",
-                        color: i === servingIdx ? "#fff" : "var(--fa-ink)",
+                        border: `1px solid ${byGrams ? "var(--fa-ink)" : "var(--fa-line)"}`,
+                        background: byGrams ? "var(--fa-ink)" : "#fff",
+                        color: byGrams ? "#fff" : "var(--fa-ink)",
                       }}
                     >
-                      {s.label}
+                      Grams
                     </button>
-                  ))}
+                  )}
                 </div>
               ) : (
-                <input className="fa-input" value={customServing} onChange={(e) => setCustomServing(e.target.value)} aria-label="Serving" placeholder="e.g. 1 bowl" />
-              )}
-              <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>How many</span>
-                <div className="flex items-center" style={{ gap: 6 }}>
-                  <button className="fa-btn" aria-label="Fewer" onClick={() => setQty((n) => Math.max(0.5, n <= 1 ? n - 0.5 : n - 1))} style={{ width: 44, padding: 0 }}><Minus size={16} className="mx-auto" /></button>
-                  <span style={{ minWidth: 40, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{qty}</span>
-                  <button className="fa-btn" aria-label="More" onClick={() => setQty((n) => (n < 1 ? n + 0.5 : n + 1))} style={{ width: 44, padding: 0 }}><Plus size={16} className="mx-auto" /></button>
+                <div className="flex flex-col" style={{ gap: 8 }}>
+                  <div className="flex" style={{ gap: 8 }}>
+                    <button className="fa-chip" aria-pressed={!customPer100} onClick={() => setCustomPer100(false)}>Per serving</button>
+                    <button className="fa-chip" aria-pressed={customPer100} onClick={() => setCustomPer100(true)}>Per 100 g</button>
+                  </div>
+                  {!customPer100 && (
+                    <input className="fa-input" value={customServing} onChange={(e) => setCustomServing(e.target.value)} aria-label="Serving" placeholder="e.g. 1 bowl" />
+                  )}
                 </div>
-              </div>
+              )}
+
+              {byGrams || (custom && customPer100) ? (
+                <div className="flex flex-col" style={{ gap: 8, marginTop: 4 }}>
+                  <div className="flex items-center justify-between" style={{ gap: 12 }}>
+                    <label htmlFor="fa-grams" style={{ fontSize: 14, fontWeight: 600 }}>How many grams</label>
+                    <div className="flex items-center" style={{ gap: 8 }}>
+                      <input
+                        id="fa-grams"
+                        className="fa-input"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={gramsInput}
+                        onChange={(e) => (custom ? setGramsInput(e.target.value.replace(/[^0-9.]/g, "")) : onGrams(e.target.value))}
+                        style={{ width: 96, textAlign: "right", borderColor: gramsInvalid ? "#b44b44" : undefined }}
+                      />
+                      <span style={{ width: 14, fontSize: 13, color: "var(--fa-dim)" }}>g</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap" style={{ gap: 6 }}>
+                    {[50, 100, 150, 200, 250].map((g) => (
+                      <button
+                        key={g}
+                        className="fa-chip"
+                        style={{ minHeight: 32, fontSize: 12, padding: "0 10px" }}
+                        aria-pressed={gramsN === g}
+                        onClick={() => (custom ? setGramsInput(String(g)) : onGrams(String(g)))}
+                      >
+                        {g} g
+                      </button>
+                    ))}
+                  </div>
+                  {byGrams && gpb && gpb !== 100 && (
+                    <span style={{ fontSize: 12, color: "var(--fa-dim)" }}>{selected?.baseLabel} ≈ {fmt(gpb)} g</span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
+                  <span className="flex flex-col" style={{ gap: 2 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>How many</span>
+                    {totalGrams !== undefined && <span style={{ fontSize: 12, color: "var(--fa-dim)" }}>≈ {fmt(totalGrams)} g</span>}
+                  </span>
+                  <div className="flex items-center" style={{ gap: 6 }}>
+                    <button className="fa-btn" aria-label="Fewer" onClick={() => setQty((n) => Math.max(0.5, n <= 1 ? n - 0.5 : n - 1))} style={{ width: 44, padding: 0 }}><Minus size={16} className="mx-auto" /></button>
+                    <span style={{ minWidth: 40, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{qty}</span>
+                    <button className="fa-btn" aria-label="More" onClick={() => setQty((n) => (n < 1 ? n + 0.5 : n + 1))} style={{ width: 44, padding: 0 }}><Plus size={16} className="mx-auto" /></button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col" style={{ gap: 10 }}>
               <div className="flex items-center justify-between">
-                <span className="fa-label">Nutrition · {selected ? "tap to edit" : "per serving"}</span>
+                <span className="fa-label">Nutrition · {selected ? (byGrams ? `for ${fmt(gramsN || 0)} g · tap to edit` : "tap to edit") : customPer100 ? "per 100 g" : "per serving"}</span>
                 {selected && <button className="fa-btn" style={{ minHeight: 36, fontSize: 12 }} onClick={reset} disabled={!edited && !selected.sourceBase}>Reset</button>}
               </div>
               {FA_NUTRIENTS.map((k) => (
@@ -441,7 +557,7 @@ export function AddFoodSheet({
               <button
                 className="fa-btn fa-btn-primary flex-1"
                 style={{ height: 52, fontSize: 15 }}
-                disabled={!!busy || !total || (custom && !customName.trim())}
+                disabled={!!busy || !total || gramsInvalid || (custom && !customName.trim())}
                 onClick={selected ? add : addCustom}
               >
                 {busy === "add" ? "Adding…" : `Add ${fmt(total?.kcal ?? 0)} kcal`}

@@ -14,6 +14,8 @@ const Body = z.object({
   food: Food,
   servingLabel: z.string().max(60),
   qty: z.number().positive().max(50),
+  /** Total grams eaten, when known — always sent when logging by weight. */
+  grams: z.number().positive().max(10000).optional(),
   /** Totals for this entry (serving × qty), as shown on the "Add N kcal" button. */
   nutrition: Nutrition,
   /** Set when the person edited the numbers: saved as their own version of the food, per one base unit. */
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
       name: body.food.name,
       servingLabel: body.servingLabel,
       qty: body.qty,
+      ...(body.grams ? { grams: Math.round(body.grams) } : {}),
       ...body.nutrition,
       source: body.overrideBase ? "yours" : body.food.source,
       edited: Boolean(body.overrideBase),

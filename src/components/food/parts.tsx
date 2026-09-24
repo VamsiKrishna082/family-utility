@@ -114,9 +114,11 @@ export function Macros({ pd, wide }: { pd: FaPersonDay; wide?: boolean }) {
 }
 
 export function entryDetail(e: FaEntry): string {
-  if (e.qty === 1) return e.servingLabel;
+  const byWeight = /^\d+(\.\d+)? g$/.test(e.servingLabel);
+  const weight = e.grams && !byWeight ? ` · ${fmt(e.grams)} g` : "";
+  if (e.qty === 1) return `${e.servingLabel}${weight}`;
   const each = Math.round(e.kcal / e.qty);
-  return `${e.qty} × ${e.servingLabel} · ${fmt(each)} kcal each`;
+  return `${e.qty} × ${e.servingLabel} · ${fmt(each)} kcal each${weight}`;
 }
 
 export function byMeal(entries: FaEntry[]): Record<FaMeal, FaEntry[]> {

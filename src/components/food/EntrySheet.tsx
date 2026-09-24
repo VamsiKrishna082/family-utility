@@ -9,10 +9,13 @@ import { FA_MEALS, FA_MEAL_LABEL, FA_SOURCE_LABEL, type FaEntry, type FaMeal } f
 /** Tap a logged item: change how many, move it to another meal, or remove it. */
 export function EntrySheet({ entry, onClose, onChanged }: { entry: FaEntry; onClose: () => void; onChanged: () => void }) {
   const [qty, setQty] = useState(entry.qty);
+  const [grams, setGrams] = useState(entry.grams ? String(entry.grams) : "");
+  const gramsN = Number(grams) || 0;
+  const regrams = Boolean(entry.grams) && gramsN > 0 && gramsN !== entry.grams;
   const [meal, setMeal] = useState<FaMeal>(entry.meal);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const kcal = Math.round((entry.kcal / entry.qty) * qty);
+  const kcal = regrams ? Math.round((entry.kcal / entry.grams!) * gramsN) : Math.round((entry.kcal / entry.qty) * qty);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -36,6 +39,26 @@ export function EntrySheet({ entry, onClose, onChanged }: { entry: FaEntry; onCl
             {entry.servingLabel} · {FA_SOURCE_LABEL[entry.source]}{entry.edited ? " · edited" : ""}
           </span>
         </div>
+
+        {entry.grams ? (
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            <div className="flex items-center justify-between" style={{ gap: 12 }}>
+              <label htmlFor="fa-entry-grams" style={{ fontSize: 14, fontWeight: 600 }}>Grams</label>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <input
+                  id="fa-entry-grams"
+                  className="fa-input"
+                  inputMode="decimal"
+                  value={grams}
+                  onChange={(e) => setGrams(e.target.value.replace(/[^0-9.]/g, ""))}
+                  style={{ width: 96, textAlign: "right" }}
+                />
+                <span style={{ width: 14, fontSize: 13, color: "var(--fa-dim)" }}>g</span>
+              </div>
+            </div>
+            <span style={{ fontSize: 12, color: "var(--fa-dim)" }}>Change the grams, or use How many below — calories follow either.</span>
+          </div>
+        ) : null}
 
         <div className="flex items-center justify-between">
           <span style={{ fontSize: 14, fontWeight: 600 }}>How many</span>
@@ -64,8 +87,8 @@ export function EntrySheet({ entry, onClose, onChanged }: { entry: FaEntry; onCl
           <button
             className="fa-btn fa-btn-primary flex-1"
             style={{ height: 52, fontSize: 15 }}
-            disabled={busy || (qty === entry.qty && meal === entry.meal)}
-            onClick={() => act(() => send(`/api/fa/entries/${entry.id}`, "PATCH", { qty, meal }))}
+            disabled={busy || (qty === entry.qty && meal === entry.meal && !regrams)}
+            onClick={() => act(() => send(`/api/fa/entries/${entry.id}`, "PATCH", regrams ? { grams: gramsN, meal } : { qty, meal }))}
           >
             {busy ? "Saving…" : `Save · ${fmt(kcal)} kcal`}
           </button>

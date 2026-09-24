@@ -11,6 +11,8 @@ export const runtime = "nodejs";
 
 const Patch = z.object({
   qty: z.number().positive().max(50).optional(),
+  /** Re-weigh an entry: nutrition scales by new/old grams, and it's labelled "N g". */
+  grams: z.number().positive().max(10000).optional(),
   meal: Meal.optional(),
   nutrition: Nutrition.optional(),
 });
@@ -24,7 +26,7 @@ async function ownEntry(id: string, person: string): Promise<FaEntry> {
   return entry;
 }
 
-/** Change quantity (nutrition rescales with it), move to another meal, or correct the numbers. */
+/** Change quantity or grams (nutrition rescales with either), move to another meal, or correct the numbers. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { person } = await requirePerson();
@@ -34,10 +36,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const day = await changeEntries(person.id, old.date, (current) => {
       const cur = current.find((e) => e.id === id) ?? old;
+      if (patch.grams && cur.grams) {
+        const grams = Math.round(patch.grams);
+        const nutrition = patch.nutrition ?? scaleNutrition(cur, grams / cur.grams);
+        return {
+          upserts: [{ ...cur, ...nutrition, grams, qty: 1, servingLabel: `${grams} g`, meal: patch.meal ?? cur.meal, edited: cur.edited || Boolean(patch.nutrition), updatedAt: Date.now() }],
+        };
+      }
       const qty = patch.qty ?? cur.qty;
       const nutrition = patch.nutrition ?? scaleNutrition(cur, qty / cur.qty);
+      const grams = cur.grams ? Math.round((cur.grams / cur.qty) * qty) : undefined;
       return {
-        upserts: [{ ...cur, ...nutrition, qty, meal: patch.meal ?? cur.meal, edited: cur.edited || Boolean(patch.nutrition), updatedAt: Date.now() }],
+        upserts: [{ ...cur, ...nutrition, qty, ...(grams ? { grams } : {}), meal: patch.meal ?? cur.meal, edited: cur.edited || Boolean(patch.nutrition), updatedAt: Date.now() }],
       };
     });
     return ok({ day });

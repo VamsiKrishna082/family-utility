@@ -3,6 +3,7 @@ import { ok, fail } from "@/lib/http";
 import { requirePerson } from "@/lib/fa/auth";
 import { dateRange, shiftDate, todayIST } from "@/lib/fa/day";
 import { COL } from "@/lib/fa/store";
+import { withGrams } from "@/lib/fa/dishes";
 import { Meal } from "@/lib/fa/schemas";
 import { FA_MEAL_LABEL, type FaEntry, type FaFood, type FaQuickResponse } from "@/lib/fa/types";
 
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
         entry,
       }));
 
-    const favourites = favSnap.docs.map((d) => ({ ...(d.data() as { food: FaFood }).food, favourite: true }));
+    const favourites = favSnap.docs.map((d) => ({ ...withGrams((d.data() as { food: FaFood }).food), favourite: true }));
     return ok({ repeat, favourites, frequent } satisfies FaQuickResponse);
   } catch (e) {
     return fail(e);

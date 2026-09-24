@@ -1,7 +1,7 @@
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
 import { requirePerson } from "@/lib/fa/auth";
-import { searchLocalDishes } from "@/lib/fa/dishes";
+import { searchLocalDishes, withGrams } from "@/lib/fa/dishes";
 import { lookupBarcode, searchOpenFoodFacts, searchUsda } from "@/lib/fa/sources";
 import { COL, cacheFood, foodDocId } from "@/lib/fa/store";
 import type { FaFood, FaNutrition, FaSearchResponse } from "@/lib/fa/types";
@@ -40,7 +40,7 @@ export async function GET(req: Request) {
     ]);
     const overrides = overridesSnap.docs.map((d) => d.data() as OverrideDoc);
     const favKeys = new Set(favSnap.docs.map((d) => (d.data() as { food: FaFood }).food.key));
-    const mark = (f: FaFood): FaFood => ({ ...f, favourite: favKeys.has(f.key) });
+    const mark = (f: FaFood): FaFood => ({ ...withGrams(f), favourite: favKeys.has(f.key) });
 
     if (barcode) {
       const cached = await db().collection(COL.foods).doc(foodDocId(`off:${barcode}`)).get();

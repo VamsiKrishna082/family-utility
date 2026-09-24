@@ -43,6 +43,8 @@ export type FaFood = {
   source: FaSource;
   /** What the base nutrition refers to, e.g. "1 piece" or "100 g". */
   baseLabel: string;
+  /** Weight of one base unit in grams (100 for packaged/USDA foods, a typical weight for dishes). Enables logging by grams. */
+  gramsPerBase?: number;
   base: FaNutrition;
   servings: FaServing[];
   /** Set when this person has their own edited version — base already reflects it. */
@@ -62,6 +64,8 @@ export type FaEntry = FaNutrition & {
   name: string;
   servingLabel: string;
   qty: number;
+  /** Total weight eaten, when the food's weight is known (always set when logged by grams). */
+  grams?: number;
   source: FaSource;
   edited: boolean;
   createdAt: number;

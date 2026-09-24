@@ -54,6 +54,7 @@ function fromOff(p: OffProduct): FaFood | null {
     barcode: p.code,
     source: "off",
     baseLabel: "100 g",
+    gramsPerBase: 100,
     base,
     servings,
   };
@@ -91,6 +92,7 @@ export async function searchUsda(q: string): Promise<FaFood[]> {
       name: f.description.charAt(0) + f.description.slice(1).toLowerCase(),
       source: "usda" as const,
       baseLabel: "100 g",
+      gramsPerBase: 100,
       base: { kcal: Math.round(kcal), protein: r1(get(["203"])), carbs: r1(get(["205"])), fat: r1(get(["204"])), fibre: r1(get(["291"])) },
       servings: [{ label: "100 g", mult: 1 }, { label: "50 g", mult: 0.5 }, { label: "200 g", mult: 2 }],
     };

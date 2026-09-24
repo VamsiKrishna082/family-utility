@@ -30,6 +30,31 @@ const UNIT_SERVINGS: Record<Unit, FaServing[]> = {
   g30: [{ label: "30 g", mult: 1 }, { label: "15 g", mult: 0.5 }, { label: "60 g", mult: 2 }],
 };
 
+/** Typical weight of one unit, for logging by grams. Liquids count 1 ml ≈ 1 g. */
+const UNIT_GRAMS: Partial<Record<Unit, number>> = {
+  mug: 150, katori: 150, cup: 150, glass: 200, tbsp: 15, tsp: 5, g100: 100, g30: 30,
+};
+
+/** Pieces and plates vary by dish — typical home/restaurant weights. */
+const DISH_GRAMS: Record<string, number> = {
+  idli: 40, dosa: 80, "masala-dosa": 170, "ghee-roast": 90, "rava-dosa": 90, "egg-dosa": 120, "set-dosa": 50,
+  uttapam: 110, pesarattu: 100, appam: 60, idiyappam: 35, puttu: 110, "medu-vada": 45, "masala-vada": 40,
+  "sabudana-vada": 50, paratha: 70, "aloo-paratha": 120, "gobi-paratha": 110, "paneer-paratha": 120, thepla: 40,
+  thalipeeth: 80, puri: 25, "chole-bhature": 300, "moong-chilla": 70, "besan-chilla": 70, dhokla: 80,
+  "bread-white": 25, "bread-brown": 28, "toast-butter": 30, "boiled-egg": 50, "egg-white": 33, omelette: 120,
+  "veg-biryani": 300, "chicken-biryani": 350, "mutton-biryani": 350, "egg-biryani": 320, "veg-fried-rice": 300,
+  chapati: 40, phulka: 30, naan: 90, "butter-naan": 100, "tandoori-roti": 45, "rumali-roti": 50,
+  "kerala-parotta": 80, "kothu-parotta": 300, "bajra-roti": 45, "jowar-roti": 45, "ragi-roti": 45, "ragi-mudde": 150,
+  "tandoori-chicken": 150, "fish-fry": 100, "papad-roasted": 12, "papad-fried": 15,
+  samosa: 80, kachori: 55, "onion-pakora": 70, bajji: 35, murukku: 20, "bhel-puri": 150, "pani-puri": 120,
+  "pav-bhaji": 350, "vada-pav": 150, "misal-pav": 350, almonds: 1.2, cashews: 1.5, walnuts: 2.5, dates: 7,
+  "marie-biscuit": 6, "digestive-biscuit": 15, cake: 60, chocolate: 20, "ice-cream": 60, maggi: 250,
+  "hakka-noodles": 300, "veg-sandwich": 150, "cheese-sandwich": 150, pizza: 110, "veg-burger": 200, fries: 115,
+  "veg-momos": 180, "chicken-momos": 180, shawarma: 250, "egg-roll": 220, "gulab-jamun": 50, rasgulla: 50,
+  jalebi: 25, "besan-laddu": 40, "boondi-laddu": 40, "mysore-pak": 35, "kaju-katli": 12, elaneer: 250,
+  cola: 330, beer: 330, whey: 30, banana: 120, apple: 180, orange: 130, guava: 100, chikoo: 100,
+};
+
 const ROWS: Row[] = [
   // Breakfast / tiffin
   ["idli", "Idli", "piece", 58, 2, 12, 0.2, 0.6],
@@ -256,6 +281,7 @@ export const LOCAL_DISHES: FaFood[] = ROWS.map(([id, name, unit, kcal, protein, 
   name,
   source: "local" as const,
   baseLabel: UNIT_BASE[unit],
+  gramsPerBase: DISH_GRAMS[id] ?? UNIT_GRAMS[unit],
   base: { kcal, protein, carbs, fat, fibre },
   servings: UNIT_SERVINGS[unit],
   // search text only; stripped (stripSearch) before anything goes to the client
@@ -265,6 +291,13 @@ export const LOCAL_DISHES: FaFood[] = ROWS.map(([id, name, unit, kcal, protein, 
 const byKey = new Map(LOCAL_DISHES.map((d) => [d.key, d]));
 export function localDish(key: string): FaFood | undefined {
   return byKey.get(key);
+}
+
+/** Foods saved before weights existed (favourites, your versions) pick up the dish table's weight. */
+export function withGrams(food: FaFood): FaFood {
+  if (food.gramsPerBase) return food;
+  const g = byKey.get(food.key)?.gramsPerBase;
+  return g ? { ...food, gramsPerBase: g } : food;
 }
 
 /** Word-prefix match on name + aliases, name matches first. */
