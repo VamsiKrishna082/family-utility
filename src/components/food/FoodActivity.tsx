@@ -35,7 +35,7 @@ function showDinnerNudge(pd: FaPersonDay, isToday: boolean): boolean {
 type Modal =
   | { kind: "add"; meal: FaMeal }
   | { kind: "entry"; entry: FaEntry }
-  | { kind: "movement" }
+  | { kind: "movement"; personId: string }
   | { kind: "setup" }
   | { kind: "meal"; meal: FaMeal };
 
@@ -138,7 +138,7 @@ export function FoodActivity() {
           ))}
         </section>
 
-        <Movement pd={viewed} editable={viewed.isYou} onEdit={() => setModal({ kind: "movement" })} />
+        <Movement pd={viewed} editable onEdit={() => setModal({ kind: "movement", personId: viewed.person.id })} />
         <Week pd={viewed} />
 
         {viewed.isYou && (
@@ -195,7 +195,7 @@ export function FoodActivity() {
             <MealsSummary key={`meals-${pd.person.id}`} entries={pd.entries} onMeal={pd.isYou ? (meal) => setModal({ kind: "meal", meal }) : undefined} />
           ))}
           {[me, other].map((pd) => (
-            <Movement key={`move-${pd.person.id}`} pd={pd} editable={pd.isYou} onEdit={() => setModal({ kind: "movement" })} wide />
+            <Movement key={`move-${pd.person.id}`} pd={pd} editable onEdit={() => setModal({ kind: "movement", personId: pd.person.id })} wide />
           ))}
           {[me, other].map((pd) => <Fortnight key={`days-${pd.person.id}`} pd={pd} />)}
         </section>
@@ -232,7 +232,9 @@ export function FoodActivity() {
         <AddFoodSheet date={date} initialMeal={modal.meal} aiEnabled={data.aiEnabled} onClose={close} onAdded={refresh} />
       )}
       {modal?.kind === "entry" && <EntrySheet entry={modal.entry} onClose={close} onChanged={refresh} />}
-      {modal?.kind === "movement" && <MovementSheet pd={me} date={date} onClose={close} onSaved={refresh} />}
+      {modal?.kind === "movement" && (
+        <MovementSheet pd={data.people.find((p) => p.person.id === modal.personId) ?? me} date={date} onClose={close} onSaved={refresh} />
+      )}
       {modal?.kind === "setup" && <SetupSheet pd={me} date={date} onClose={close} onSaved={refresh} />}
       {modal?.kind === "meal" && (
         <Sheet onClose={close} label={FA_MEAL_LABEL[modal.meal]}>

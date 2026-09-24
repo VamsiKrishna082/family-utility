@@ -26,7 +26,7 @@ export function MovementSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay;
     setBusy(true);
     setError("");
     try {
-      await send("/api/fa/activity", "PUT", { date, steps: stepsN, workoutMin: minN, activity: minN > 0 ? activity : undefined });
+      await send("/api/fa/activity", "PUT", { person: pd.person.id, date, steps: stepsN, workoutMin: minN, activity: minN > 0 ? activity : undefined });
       onSaved();
       onClose();
     } catch (e) {
@@ -36,16 +36,16 @@ export function MovementSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay;
   };
 
   return (
-    <Sheet onClose={onClose} label="Movement">
+    <Sheet onClose={onClose} label={`Movement · ${pd.isYou ? "You" : pd.person.name}`}>
       <div className="flex flex-col" style={{ gap: 16 }}>
-        <h2 className="fa-serif" style={{ margin: 0, fontSize: 22 }}>Movement</h2>
+        <h2 className="fa-serif" style={{ margin: 0, fontSize: 22 }}>Movement{pd.isYou ? "" : ` · ${pd.person.name}`}</h2>
 
         <div className="flex flex-col" style={{ gap: 8 }}>
           <label htmlFor="fa-steps" className="fa-label">Steps</label>
           <input id="fa-steps" className="fa-input" inputMode="numeric" placeholder="0" value={steps} onChange={(e) => setSteps(e.target.value.replace(/\D/g, ""))} />
           {pd.stepsDefault && !steps && (
             <button className="fa-chip" style={{ alignSelf: "flex-start" }} onClick={() => setSteps(String(pd.stepsDefault))}>
-              Your usual · {fmt(pd.stepsDefault)}
+              {pd.isYou ? "Your usual" : "Usual"} · {fmt(pd.stepsDefault)}
             </button>
           )}
         </div>
@@ -61,7 +61,7 @@ export function MovementSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay;
         </div>
 
         <p style={{ margin: 0, fontSize: 13, color: "var(--fa-dim)" }}>
-          About <strong style={{ color: "var(--fa-ink)" }}>{fmt(estimate)} kcal</strong> burned — an estimate from steps, minutes and {pd.profile ? "your weight" : "an average weight (set up your profile for a better one)"}.
+          About <strong style={{ color: "var(--fa-ink)" }}>{fmt(estimate)} kcal</strong> burned — an estimate from steps, minutes and {pd.profile ? (pd.isYou ? "your weight" : `${pd.person.name}’s weight`) : "an average weight (set up your profile for a better one)"}.
         </p>
         {error && <p style={{ margin: 0, fontSize: 13, color: "#b44b44" }}>{error}</p>}
         <button className="fa-btn fa-btn-primary" style={{ height: 52, fontSize: 15 }} disabled={busy} onClick={save}>

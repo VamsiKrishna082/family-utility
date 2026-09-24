@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
-import { requirePerson } from "@/lib/fa/auth";
+import { BadRequest, requirePerson } from "@/lib/fa/auth";
+import { personById } from "@/lib/fa/people";
 import { COL, buildDay, dayId } from "@/lib/fa/store";
 import { DateStr } from "@/lib/fa/schemas";
 import { FA_ACTIVITIES, type FaDay, type FaEntry, type FaProfile } from "@/lib/fa/types";
@@ -9,6 +10,8 @@ import { FA_ACTIVITIES, type FaDay, type FaEntry, type FaProfile } from "@/lib/f
 export const runtime = "nodejs";
 
 const Body = z.object({
+  /** Whose movement — either of you can fill it in for the other. Defaults to the signed-in person. */
+  person: z.string().optional(),
   date: DateStr,
   steps: z.number().int().min(0).max(100000),
   workoutMin: z.number().int().min(0).max(600),
@@ -18,12 +21,15 @@ const Body = z.object({
 /**
  * PUT /api/fa/activity — steps and workout, entered by hand (no free
  * server-side step API exists; see food.md). stepsSource stays 'manual' so a
- * device sync can be added later without a model change.
+ * device sync can be added later without a model change. Unlike food
+ * entries, either person may enter the other's steps (asked for explicitly).
  */
 export async function PUT(req: Request) {
   try {
-    const { person } = await requirePerson();
+    const { person: me } = await requirePerson();
     const body = Body.parse(await req.json());
+    const person = body.person ? personById(body.person) : me;
+    if (!person) throw new BadRequest("Unknown person");
     const dayRef = db().collection(COL.days).doc(dayId(person.id, body.date));
     const entriesQ = db().collection(COL.entries).where("person", "==", person.id).where("date", "==", body.date);
     const profileRef = db().collection(COL.profiles).doc(person.id);
