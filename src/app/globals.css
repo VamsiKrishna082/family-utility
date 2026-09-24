@@ -96,3 +96,45 @@ a.card:active { transform: scale(.985); }
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Food & activity — the section's own palette and type, from its design
+   (food.zip). Scoped to .fa so no other section changes. */
+.fa {
+  --fa-card: #ffffff;
+  --fa-ink: #1f1d1a;
+  --fa-dim: #5e5a52;
+  --fa-line: #e4dfd4;
+  --fa-line2: #f0ece3;
+  --fa-track: #ece7dc;
+  --fa-field: #fbf9f4;
+  --fa-accent: #2e6a4c;
+  --fa-accent-soft: #e8efea;
+  --fa-over: #c98a6a;
+  --fa-under: #7c95b0;
+  --fa-none: #e4dfd4;
+  --fa-carbs: #c9b99a;
+  --fa-fat: #7c95b0;
+  --fa-fibre: #c79a3c;
+  --fa-hero: #1f1d1a;
+  --fa-hero-line: #3a3733;
+  --fa-hero-dim: #d9d4c8;
+  --fa-hero-bar: #8fd3ae;
+  font-family: "Manrope", system-ui, sans-serif;
+  color: var(--fa-ink);
+  font-variant-numeric: tabular-nums;
+}
+.fa .fa-serif { font-family: var(--display); font-weight: 600; }
+.fa .fa-card { background: var(--fa-card); border: 1px solid var(--fa-line); border-radius: 18px; }
+.fa .fa-label { font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--fa-dim); }
+.fa .fa-btn { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--fa-line); background: var(--fa-card); font-size: 13px; font-weight: 700; color: var(--fa-ink); transition: filter .14s ease, transform .1s ease; }
+.fa .fa-btn:active:not(:disabled) { transform: scale(.98); }
+.fa .fa-btn:hover:not(:disabled) { filter: brightness(.97); }
+.fa .fa-btn:disabled { opacity: .5; }
+.fa .fa-btn-primary { border: 0; background: var(--fa-accent); color: #fff; }
+.fa .fa-btn-dark { border: 0; background: var(--fa-ink); color: #fff; }
+.fa .fa-chip { min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--fa-line); background: var(--fa-card); font-size: 13px; font-weight: 600; color: var(--fa-ink); white-space: nowrap; }
+.fa .fa-chip[aria-pressed="true"] { background: var(--fa-ink); border-color: var(--fa-ink); color: #fff; }
+.fa .fa-input { height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--fa-line); background: var(--fa-field); font-size: 15px; font-weight: 700; color: var(--fa-ink); outline: none; min-width: 0; }
+.fa .fa-input:focus { border-color: var(--fa-ink); }
+.fa .fa-bar { height: 8px; border-radius: 999px; background: var(--fa-track); overflow: hidden; }
+.fa .fa-bar > div { height: 100%; border-radius: 999px; transition: width .3s ease; }

@@ -1,6 +1,6 @@
 import {
   Images, Wallet, TrendingUp, FolderLock, ListChecks, Repeat, CalendarHeart,
-  Plane, Bookmark, Car, Siren, type LucideIcon,
+  Plane, Bookmark, Car, Siren, Utensils, type LucideIcon,
 } from "lucide-react";
 
 export type Section = {
@@ -27,4 +27,5 @@ export const SECTIONS: Section[] = [
   { key: "wish", name: "Wishlist", href: "/wishlist", icon: Bookmark, tint: "#f2e9f0", ink: "#8a4f76", blurb: "Watch, eat, buy", ready: true },
   { key: "cars", name: "Vehicles", href: "/vehicles", icon: Car, tint: "#e9ecf3", ink: "#4a5c86", blurb: "Service and fuel", ready: true },
   { key: "sos", name: "Emergency", href: "/emergency", icon: Siren, tint: "#f6e8e6", ink: "#a8453a", blurb: "In case of", ready: true },
+  { key: "food", name: "Food", href: "/food", icon: Utensils, tint: "#f4e9e5", ink: "#a85d2f", blurb: "Food and movement, daily", ready: true },
 ];
