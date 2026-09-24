@@ -73,6 +73,7 @@ export async function POST(req: Request) {
     if (!catSnap.exists) throw new Error("Unknown category");
     const category = catSnap.data() as MoneyCategory;
     const subcategory = normalizeSubcategory(body.subcategory, category.subcategories);
+    if (!subcategory) throw new Error("Pick or type a sub-category");
 
     const settings = await getSettings();
     const monthKey = computeMonthKey(body.date, settings.monthStartDay);

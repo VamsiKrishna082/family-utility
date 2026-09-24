@@ -60,6 +60,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         : patch.subcategory !== undefined
           ? normalizeSubcategory(patch.subcategory, newCatSubs)
           : categoryChanged ? undefined : oldTx.subcategory;
+      // Required going forward, but only enforced when an edit touches it, so fixing
+      // e.g. the amount on an older entry that predates sub-categories still works.
+      if ((patch.subcategory !== undefined || categoryChanged) && !subcategory) throw new Error("Pick or type a sub-category");
 
       const newTx: MoneyTx = {
         ...oldTx,

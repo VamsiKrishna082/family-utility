@@ -87,7 +87,7 @@ export function MoneyQuickAdd({
   const isCreditCardPaymentCategory = type === "expense" && !ccSpend && selectedCategoryName?.toLowerCase() === "credit card";
   const showCardPicker = ccSpend || isCreditCardPaymentCategory;
 
-  const canSave = Boolean(parseRupeesToPaise(amount) && categoryId && (!ccSpend || cardId));
+  const canSave = Boolean(parseRupeesToPaise(amount) && categoryId && subcategory.trim() && (!ccSpend || cardId));
 
   const createCategory = async () => {
     const name = newCategoryName.trim();
@@ -143,8 +143,7 @@ export function MoneyQuickAdd({
     try {
       const body = {
         type, amountPaise, categoryId, date, note,
-        // null (not undefined) on edit so clearing the field actually clears it server-side.
-        subcategory: normalizeSubcategory(subcategory, knownSubcategories) ?? (editing ? null : undefined),
+        subcategory: normalizeSubcategory(subcategory, knownSubcategories),
         mode: ccSpend ? "credit_card" : (mode || undefined),
         cardId: showCardPicker && cardId ? cardId : (editing?.cardId ? null : undefined),
         tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
@@ -286,7 +285,7 @@ export function MoneyQuickAdd({
           {categoryId && (
             <div className="mb-4">
               <p style={{ fontSize: 12.5, color: "var(--faint)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
-                Sub-category <span style={{ textTransform: "none", fontWeight: 400 }}>(optional)</span>
+                Sub-category <span style={{ textTransform: "none", fontWeight: 400, color: subcategory.trim() ? "var(--faint)" : "var(--red)" }}>(required)</span>
               </p>
               {knownSubcategories.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
@@ -316,7 +315,7 @@ export function MoneyQuickAdd({
                 value={subcategory}
                 onChange={(e) => setSubcategory(e.target.value)}
                 className="w-full"
-                style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "9px 12px", fontSize: 13.5 }}
+                style={{ borderRadius: 10, border: `1px solid ${subcategory.trim() ? "var(--line)" : "var(--red)"}`, padding: "9px 12px", fontSize: 13.5 }}
               />
             </div>
           )}

@@ -34,7 +34,8 @@ export function MoneyRecurring({ categories, onPosted }: { categories: MoneyCate
       await fetch("/api/money/tx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, amountPaise, categoryId, date: todayISO(), note: name, recurringId: id }),
+        // Sub-categories are required; a template's own name (Rent, SIP…) is the natural one.
+        body: JSON.stringify({ type, amountPaise, categoryId, subcategory: name, date: todayISO(), note: name, recurringId: id }),
       });
       onPosted();
     } finally {
