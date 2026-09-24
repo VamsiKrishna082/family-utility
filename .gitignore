@@ -7,3 +7,6 @@ node_modules/
 .DS_Store
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Local Claude Code worktrees and session files — never part of the repo or a deploy
+.claude/

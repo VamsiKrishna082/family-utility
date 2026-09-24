@@ -1,6 +1,14 @@
-node_modules
-.next
-.env*
-!.env.example
-npm-debug.log
+# Docker build context. Patterns here only match at the context root unless
+# prefixed with **/ — so nested node_modules/.next (e.g. inside local git
+# worktrees under .claude/) need the **/ form to stay out.
+**/node_modules
+**/.next
+.claude
 .git
+
+# Secrets never go into the image; .env.example is the only committed one.
+**/.env*
+!.env.example
+
+**/*.log
+**/.DS_Store
