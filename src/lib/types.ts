@@ -105,6 +105,8 @@ export type MoneyTx = {
   source: "manual" | "recurring";
   /** Set when this entry was posted from a recurring template ("Post this month"). */
   recurringId?: string;
+  /** Set when this saving was a contribution to a Goal — the goal's savedPaise moves with this entry's edits and deletion. */
+  goalId?: string;
   createdBy: string; // email
   createdAt: number;
   updatedAt: number;

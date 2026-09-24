@@ -51,6 +51,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         t.get(db().collection("money_categories").doc(oldTx.categoryId)),
         categoryChanged ? t.get(db().collection("money_categories").doc(newCategoryId)) : Promise.resolve(null),
       ]);
+      // A goal contribution moves the goal's total with it: read the goal now, before any write.
+      const goalSnap = oldTx.goalId ? await t.get(db().collection("money_goals").doc(oldTx.goalId)) : null;
       const oldGroup = (oldCatSnap.data() as MoneyCategory | undefined)?.group ?? "Miscellaneous";
       const newGroup = categoryChanged ? ((newCatSnap!.data() as MoneyCategory | undefined)?.group ?? "Miscellaneous") : oldGroup;
       const newCatSnapResolved = categoryChanged ? newCatSnap! : oldCatSnap;
@@ -93,6 +95,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
 
       t.set(txRef, newTx);
+      if (goalSnap?.exists) {
+        const counted = (tx: MoneyTx) => (tx.type === "saving" ? tx.amountPaise : 0);
+        const delta = counted(newTx) - counted(oldTx);
+        if (delta !== 0) t.update(goalSnap.ref, { savedPaise: FieldValue.increment(delta), updatedAt: Date.now() });
+      }
       if (subcategory && newCatSnapResolved.exists && !newCatSubs.includes(subcategory)) {
         t.set(newCatSnapResolved.ref, { subcategories: FieldValue.arrayUnion(subcategory) }, { merge: true });
       }
@@ -116,9 +123,14 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       const tx = snap.data() as MoneyTx;
       const catSnap = await t.get(db().collection("money_categories").doc(tx.categoryId));
       const group = (catSnap.data() as MoneyCategory | undefined)?.group ?? "Miscellaneous";
+      const goalSnap = tx.goalId ? await t.get(db().collection("money_goals").doc(tx.goalId)) : null;
 
       await applyTxDelta(t, tx.monthKey, { type: tx.type, amountPaise: tx.amountPaise, group, categoryId: tx.categoryId, mode: tx.mode }, -1);
       t.delete(txRef);
+      // Deleting a goal contribution takes it back off the goal.
+      if (goalSnap?.exists && tx.type === "saving") {
+        t.update(goalSnap.ref, { savedPaise: FieldValue.increment(-tx.amountPaise), updatedAt: Date.now() });
+      }
     });
 
     return ok({ id });

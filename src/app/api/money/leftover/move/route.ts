@@ -39,13 +39,17 @@ export async function POST(req: Request) {
     const tx: MoneyTx = {
       id: txRef.id, type: "saving", amountPaise, date, monthKey, categoryId,
       note: goalId ? "Contribution to goal" : "Moved from leftover", tags: [], source: "manual",
+      ...(goalId ? { goalId } : {}),
       paidBy: user.email, createdBy: user.email, createdAt: now, updatedAt: now,
     };
 
     await db().runTransaction(async (t) => {
+      // Read before any write (Firestore transaction rule); never recreate a deleted goal.
+      const goalSnap = goalId ? await t.get(db().collection("money_goals").doc(goalId)) : null;
+      if (goalId && !goalSnap?.exists) throw new Error("That goal no longer exists");
       await applyTxDelta(t, monthKey, { type: "saving", amountPaise, group: category.group, categoryId, mode: undefined }, 1);
       t.set(txRef, tx);
-      if (goalId) t.set(db().collection("money_goals").doc(goalId), { savedPaise: FieldValue.increment(amountPaise), updatedAt: now }, { merge: true });
+      if (goalId) t.update(goalSnap!.ref, { savedPaise: FieldValue.increment(amountPaise), updatedAt: now });
     });
 
     return ok({ tx });
