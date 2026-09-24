@@ -176,26 +176,28 @@ export function FoodActivity() {
           </div>
         </header>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 20, alignItems: "start" }}>
+        {/* Laid out row by row (both heroes, then both macros cards, …) rather
+            than as two independent columns, so each pair of cards shares a
+            row height and the two people line up across the page. */}
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", columnGap: 20, rowGap: 16, alignItems: "stretch" }}>
           {[me, other].map((pd) => (
-            <div key={pd.person.id} className="flex flex-col" style={{ gap: 16 }}>
-              <Hero
-                pd={pd}
-                isToday={isToday}
-                wide
-                title={<span className="fa-serif" style={{ fontSize: 24 }}>{pd.isYou ? "You" : pd.person.name}</span>}
-                onSetup={pd.isYou ? () => setModal({ kind: "setup" }) : undefined}
-              />
-              <Macros pd={pd} wide />
-              <MealsSummary entries={pd.entries} onMeal={pd.isYou ? (meal) => setModal({ kind: "meal", meal }) : undefined} />
-              {pd.isYou && (
-                <button className="fa-btn" onClick={() => setModal({ kind: "movement" })}>
-                  Movement · {fmt(pd.day?.steps ?? 0)} steps · {pd.day?.workoutMin ?? 0} min — edit
-                </button>
-              )}
-              <Fortnight pd={pd} />
-            </div>
+            <Hero
+              key={`hero-${pd.person.id}`}
+              pd={pd}
+              isToday={isToday}
+              wide
+              title={<span className="fa-serif" style={{ fontSize: 24 }}>{pd.isYou ? "You" : pd.person.name}</span>}
+              onSetup={pd.isYou ? () => setModal({ kind: "setup" }) : undefined}
+            />
           ))}
+          {[me, other].map((pd) => <Macros key={`macros-${pd.person.id}`} pd={pd} wide />)}
+          {[me, other].map((pd) => (
+            <MealsSummary key={`meals-${pd.person.id}`} entries={pd.entries} onMeal={pd.isYou ? (meal) => setModal({ kind: "meal", meal }) : undefined} />
+          ))}
+          {[me, other].map((pd) => (
+            <Movement key={`move-${pd.person.id}`} pd={pd} editable={pd.isYou} onEdit={() => setModal({ kind: "movement" })} wide />
+          ))}
+          {[me, other].map((pd) => <Fortnight key={`days-${pd.person.id}`} pd={pd} />)}
         </section>
 
         <section style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>

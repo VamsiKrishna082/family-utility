@@ -60,7 +60,8 @@ export function Hero({ pd, isToday, title, wide, onSetup }: { pd: FaPersonDay; i
           {left >= 0 ? `${fmt(left)} kcal${wide ? " left" : ""}` : `${fmt(-left)} kcal over`}
         </span>
       )}
-      <div style={{ height: 10, borderRadius: 999, background: "var(--fa-hero-line)", overflow: "hidden" }}>
+      {/* marginTop auto: when a desktop row stretches two heroes to one height, bars and stats still line up */}
+      <div style={{ height: 10, borderRadius: 999, background: "var(--fa-hero-line)", overflow: "hidden", marginTop: "auto" }}>
         <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: "var(--fa-hero-bar)", transition: "width .3s ease" }} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${wide ? 4 : 3}, minmax(0, 1fr))`, gap: 10, paddingTop: 12, borderTop: "1px solid var(--fa-hero-line)" }}>
@@ -191,7 +192,7 @@ export function MealsSummary({ entries, onMeal }: { entries: FaEntry[]; onMeal?:
   );
 }
 
-export function Movement({ pd, editable, onEdit }: { pd: FaPersonDay; editable: boolean; onEdit: () => void }) {
+export function Movement({ pd, editable, onEdit, wide }: { pd: FaPersonDay; editable: boolean; onEdit: () => void; wide?: boolean }) {
   const d = pd.day;
   const goal = pd.profile?.stepGoal ?? 10000;
   const steps = d?.steps ?? 0;
@@ -203,9 +204,9 @@ export function Movement({ pd, editable, onEdit }: { pd: FaPersonDay; editable: 
     </div>
   );
   return (
-    <section className="fa-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div className="flex justify-between items-baseline">
-        <h2 className="fa-serif" style={{ margin: 0, fontSize: 19 }}>Movement</h2>
+    <section className="fa-card" style={{ padding: wide ? 22 : 18, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="flex justify-between items-baseline" style={{ minHeight: 44 }}>
+        <h2 className="fa-serif" style={{ margin: 0, fontSize: wide ? 20 : 19 }}>Movement</h2>
         {editable && <button className="fa-btn" onClick={onEdit}>Edit</button>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
@@ -215,7 +216,7 @@ export function Movement({ pd, editable, onEdit }: { pd: FaPersonDay; editable: 
       </div>
       <div className="fa-bar"><div style={{ width: `${Math.min(100, pct)}%`, background: "var(--fa-accent)" }} /></div>
       <span style={{ fontSize: 12, color: "var(--fa-dim)" }}>
-        {pct}% of {pd.isYou ? "your" : "the"} {fmt(goal)} step goal · burned is an estimate
+        {pct}% of {pd.isYou ? "your" : `${pd.person.name}’s`} {fmt(goal)} step goal · burned is an estimate
       </span>
     </section>
   );
