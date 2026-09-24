@@ -444,3 +444,60 @@ export async function fileMeta(fileId: string): Promise<{ name: string; mimeType
   const res = await drive().files.get({ fileId, fields: "name,mimeType", supportsAllDrives: true });
   return { name: res.data.name ?? "file", mimeType: res.data.mimeType ?? "application/octet-stream" };
 }
+
+/**
+ * Fallback for the resumable-upload CORS quirk documented in `src/lib/upload.ts`
+ * — when the final PUT's response body isn't readable, the file id isn't
+ * either, even though the upload genuinely succeeded. Finds it by name
+ * instead: most-recently-created match in the given parent folder, which is
+ * reliable enough seconds after that exact upload just completed. Not meant
+ * for anything else.
+ */
+export async function findRecentUpload(name: string, parentId: string): Promise<string | null> {
+  const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const res = await drive().files.list({
+    q: `name = '${escaped}' and '${parentId}' in parents and trashed = false`,
+    orderBy: "createdTime desc",
+    pageSize: 1,
+    fields: "files(id)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  return res.data.files?.[0]?.id ?? null;
+}
+
+/** Household's Drive storage usage — the whole shared library (Album + Documents), not just one folder, since that's the number that actually matters (running out of space). */
+export async function driveStorageQuota(): Promise<{ usedBytes: number; limitBytes: number | null }> {
+  const res = await drive().about.get({ fields: "storageQuota" });
+  const q = res.data.storageQuota;
+  return {
+    usedBytes: Number(q?.usage ?? 0),
+    limitBytes: q?.limit ? Number(q.limit) : null, // omitted by Google on unlimited-storage plans
+  };
+}
+
+/**
+ * Shared by the authenticated file route and the public share-link route —
+ * same Range-passthrough proxy logic either way, the only difference is
+ * which one calls requireUser() first.
+ */
+export async function proxyDriveFile(fileId: string, range: string | null): Promise<Response> {
+  const [meta, token] = await Promise.all([fileMeta(fileId), accessToken()]);
+
+  const upstream = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+    headers: { Authorization: `Bearer ${token}`, ...(range ? { Range: range } : {}) },
+  });
+
+  const headers = new Headers();
+  headers.set("Content-Type", meta.mimeType);
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Cache-Control", "private, max-age=3600");
+  const disposition = meta.mimeType === "application/pdf" ? "inline" : "attachment";
+  headers.set("Content-Disposition", `${disposition}; filename="${meta.name.replace(/"/g, "")}"`);
+  for (const h of ["content-length", "content-range"]) {
+    const v = upstream.headers.get(h);
+    if (v) headers.set(h, v);
+  }
+
+  return new Response(upstream.body, { status: upstream.status, headers });
+}

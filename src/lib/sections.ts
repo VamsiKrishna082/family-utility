@@ -1,6 +1,6 @@
 import {
-  Images, Wallet, TrendingUp, FolderLock, ListChecks, Repeat, CalendarHeart,
-  Plane, Bookmark, Car, Siren, Utensils, type LucideIcon,
+  Images, Wallet, TrendingUp, FolderLock, CalendarHeart,
+  Plane, Utensils, type LucideIcon,
 } from "lucide-react";
 
 export type Section = {
@@ -20,12 +20,7 @@ export const SECTIONS: Section[] = [
   { key: "money", name: "Money", href: "/money", icon: Wallet, tint: "#e8f0ea", ink: "#2f6b4f", blurb: "The monthly budget", ready: true },
   { key: "worth", name: "Net worth", href: "/worth", icon: TrendingUp, tint: "#f2ece2", ink: "#8a6a32", blurb: "What you own", ready: true },
   { key: "docs", name: "Documents", href: "/docs", icon: FolderLock, tint: "#eceaf3", ink: "#57519a", blurb: "Papers that matter", ready: true },
-  { key: "lists", name: "Lists", href: "/lists", icon: ListChecks, tint: "#f2ede8", ink: "#97664a", blurb: "To-dos and groceries", ready: true },
-  { key: "bills", name: "Bills", href: "/bills", icon: Repeat, tint: "#f4e9ea", ink: "#a04b50", blurb: "Bills and renewals", ready: true },
   { key: "dates", name: "Dates", href: "/dates", icon: CalendarHeart, tint: "#efeee5", ink: "#6e7043", blurb: "Birthdays and more", ready: true },
   { key: "trips", name: "Trips", href: "/trips", icon: Plane, tint: "#e5efee", ink: "#2f6e6b", blurb: "Where you are going", ready: true },
-  { key: "wish", name: "Wishlist", href: "/wishlist", icon: Bookmark, tint: "#f2e9f0", ink: "#8a4f76", blurb: "Watch, eat, buy", ready: true },
-  { key: "cars", name: "Vehicles", href: "/vehicles", icon: Car, tint: "#e9ecf3", ink: "#4a5c86", blurb: "Service and fuel", ready: true },
-  { key: "sos", name: "Emergency", href: "/emergency", icon: Siren, tint: "#f6e8e6", ink: "#a8453a", blurb: "In case of", ready: true },
   { key: "food", name: "Food", href: "/food", icon: Utensils, tint: "#f4e9e5", ink: "#a85d2f", blurb: "Food and movement, daily", ready: true },
 ];

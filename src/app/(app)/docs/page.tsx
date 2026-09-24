@@ -1,10 +1,5 @@
-import { DocsBrowser } from "@/components/DocsBrowser";
+import { DocumentsDashboard } from "@/components/DocumentsDashboard";
 
-export default async function DocsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ folder?: string }>;
-}) {
-  const { folder } = await searchParams;
-  return <DocsBrowser folderId={folder ?? null} />;
+export default function DocsPage() {
+  return <DocumentsDashboard />;
 }

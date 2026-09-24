@@ -354,35 +354,6 @@ export type NwDashboardResponse = {
 };
 
 /* ------------------------------------------------------------------ */
-/* Lists — to-dos and groceries                                        */
-/* ------------------------------------------------------------------ */
-export type ListItem = { id: string; text: string; done: boolean };
-
-export type ListDoc = {
-  id: string;
-  name: string;
-  items: ListItem[];
-  createdAt: number;
-  updatedAt: number;
-};
-
-/* ------------------------------------------------------------------ */
-/* Bills & renewals                                                    */
-/* ------------------------------------------------------------------ */
-export const BILL_FREQUENCIES = ["monthly", "yearly", "once"] as const;
-
-export type Bill = {
-  id: string;
-  name: string;
-  amount: number;
-  frequency: (typeof BILL_FREQUENCIES)[number];
-  nextDueDate: string; // yyyy-mm-dd
-  autopay: boolean;
-  notes: string;
-  createdAt: number;
-};
-
-/* ------------------------------------------------------------------ */
 /* Dates — birthdays, anniversaries                                    */
 /* ------------------------------------------------------------------ */
 export const DATE_TYPES = ["birthday", "anniversary", "other"] as const;
@@ -415,53 +386,74 @@ export type Trip = {
 };
 
 /* ------------------------------------------------------------------ */
-/* Wishlist                                                             */
+/* Documents — Drive holds the bytes, Firestore holds the metadata     */
 /* ------------------------------------------------------------------ */
-export const WISHLIST_CATEGORIES = ["Watch", "Eat", "Buy", "Other"] as const;
+/** Deliberately not Net Worth's yours/hers/joint — documents can belong to people outside the shared pot. */
+export const DOC_OWNERS = ["yours", "hers", "common", "parents"] as const;
+export type DocOwner = (typeof DOC_OWNERS)[number];
 
-export type WishlistItem = {
-  id: string;
-  title: string;
-  url: string;
-  price: number | null;
-  category: string;
-  notes: string;
-  done: boolean;
-  addedBy: string;
-  createdAt: number;
-};
+export const DOC_SEED_CATEGORIES = [
+  "Identity & personal", "Insurance", "Property & rent", "Vehicle",
+  "Financial & tax", "Medical", "Education & work", "Warranties & bills",
+] as const;
 
-/* ------------------------------------------------------------------ */
-/* Vehicles                                                             */
-/* ------------------------------------------------------------------ */
-export type VehicleLog = {
-  id: string;
-  date: string; // yyyy-mm-dd
-  kind: "fuel" | "service";
-  odometer: number | null;
-  amount: number;
-  notes: string;
-};
+export const DOC_EXPIRY_LABELS = ["renew", "expires", "keep_till"] as const;
+export type DocExpiryLabel = (typeof DOC_EXPIRY_LABELS)[number];
 
-export type Vehicle = {
+export type DocCategory = {
   id: string;
   name: string;
-  regNumber: string;
-  logs: VehicleLog[];
+  order: number;
+  archived: boolean;
   createdAt: number;
 };
 
-/* ------------------------------------------------------------------ */
-/* Emergency card — one document, meant to work even offline           */
-/* ------------------------------------------------------------------ */
-export type EmergencyContact = { id: string; name: string; relation: string; phone: string };
+/** One entry in a record's version history — versions[0] is always the current one, kept in sync with the record's own currentDriveFileId/mimeType/sizeBytes. */
+export type DocVersion = {
+  driveFileId: string;
+  mimeType: string;
+  sizeBytes: number;
+  label?: string;
+  addedBy: string;
+  addedAt: number;
+};
 
-export type EmergencyCard = {
-  bloodType: { vamsi: string; partner: string };
-  allergies: string;
-  address: string;
-  contacts: EmergencyContact[];
-  doctor: string;
-  insurance: string;
+export type DocRecord = {
+  id: string;
+  name: string;
+  categoryId: string;
+  owner: DocOwner;
+  currentDriveFileId: string;
+  mimeType: string;
+  sizeBytes: number;
+  expiryDate?: string; // YYYY-MM-DD
+  expiryLabel?: DocExpiryLabel;
+  issuer?: string;
+  refNumberMasked?: string;
+  coverAmountPaise?: number;
+  notes?: string;
+  tags: string[];
+  versions: DocVersion[];
+  archived: boolean;
+  createdBy: string;
+  createdAt: number;
   updatedAt: number;
 };
+
+export type DocCategoriesResponse = { items: DocCategory[] };
+export type DocRecordsResponse = { items: DocRecord[] };
+export type DocRecordResponse = { record: DocRecord };
+
+/** A time-limited, revocable link to one specific version of one document — the app's only unauthenticated access point. */
+export type DocShare = {
+  token: string;
+  recordId: string;
+  driveFileId: string;
+  createdBy: string;
+  createdAt: number;
+  expiresAt: number;
+  revoked: boolean;
+};
+export type DocSharesResponse = { items: DocShare[] };
+
+export type DriveQuota = { usedBytes: number; limitBytes: number | null };
