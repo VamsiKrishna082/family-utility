@@ -167,7 +167,7 @@ export function DatesSection() {
           <div className="flex flex-wrap justify-center mt-5" style={{ gap: 8 }}>
             {(["birthday", "anniversary", "remembrance", "festival"] as DtType[]).map((t) => (
               <button key={t} className="btn btn-plain flex items-center gap-2" onClick={() => setForm({ type: t })}>
-                <TypeIcon type={t} size={24} /> Add a {DT_TYPE_LABEL[t].toLowerCase()}
+                <TypeIcon type={t} size={24} /> Add {t === "anniversary" ? "an" : "a"} {DT_TYPE_LABEL[t].toLowerCase()}
               </button>
             ))}
           </div>
