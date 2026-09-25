@@ -60,7 +60,7 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
       )}
       {withPhotos.length === 0 && <p style={{ color: "var(--faint)", marginTop: 30 }}>The journal for this trip hasn&apos;t been written yet.</p>}
 
-      {withPhotos.map(({ day, photos }) => (
+      {withPhotos.filter(({ day, photos }) => photos.length || day.title || day.story || day.places.length || day.highlight || day.food?.length).map(({ day, photos }) => (
         <section key={day.day} className="share-day" style={{ marginTop: 36, paddingTop: 24, borderTop: "1px solid var(--line)" }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--faint)" }}>
             Day {day.day}{trip.startDate ? ` · ${dayLabel(dateOfDay(trip.startDate, day.day))}` : ""}

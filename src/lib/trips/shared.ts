@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/firestore";
 import { listFolder } from "@/lib/drive";
-import { daysCol, normalizeTrip, readDay } from "@/lib/trips/store";
+import { daysCol, emptyDay, normalizeTrip, readDay } from "@/lib/trips/store";
 import type { Trip, TripDay } from "@/lib/trips/types";
 import type { Entry } from "@/lib/types";
 
@@ -17,9 +17,11 @@ export async function tripByShareToken(token: string): Promise<Trip | null> {
   return a.length === b.length && timingSafeEqual(a, b) ? normalizeTrip(trip) : null;
 }
 
+/** Every day of the trip (1…days), empty ones filled in — a day with nothing saved yet has no record. */
 export async function sharedDays(trip: Trip): Promise<TripDay[]> {
   const snap = await daysCol(trip.id).get();
-  return snap.docs.map((d) => readDay(d.data())).filter((d) => d.day <= trip.days).sort((a, b) => a.day - b.day);
+  const byNum = new Map(snap.docs.map((d) => readDay(d.data())).map((d) => [d.day, d]));
+  return Array.from({ length: trip.days }, (_, i) => byNum.get(i + 1) ?? emptyDay(trip.id, i + 1));
 }
 
 /** Photos (not videos, not folders) in a day's linked Album folder, oldest first like a camera roll. */

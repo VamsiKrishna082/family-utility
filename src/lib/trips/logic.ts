@@ -170,11 +170,13 @@ export const headCount = (travellers: string[]) => travellers.reduce((n, t) => n
 /** Maps a Money category onto the trip's budget-plan buckets (Transport → travel, Stays → stay, …). */
 export function budgetBucket(categoryGroup: string, categoryName: string): BudgetKey {
   const g = `${categoryGroup} ${categoryName}`.toLowerCase();
-  if (/stay|hotel|homestay|resort|airbnb/.test(g)) return "stay";
-  if (/transport|fuel|cab|auto|metro|flight|train|bus|travel|trip|parking|toll/.test(g)) return "travel";
-  if (/food|dining|restaurant|snack|grocer/.test(g)) return "food";
-  if (/shopping|clothing|electronics|gift/.test(g)) return "shopping";
-  if (/fun|movie|outing|hobb|activity|ticket/.test(g)) return "activities";
+  // Whole words only — "Tripod" is not a trip, "business" is not a bus.
+  const has = (words: string) => new RegExp(`\\b(${words})\\b`).test(g);
+  if (has("stays?|hotels?|homestays?|resorts?|airbnb|lodging")) return "stay";
+  if (has("transport|fuel|petrol|diesel|cabs?|auto|metro|flights?|trains?|bus|buses|travel|trips?|parking|tolls?|taxi")) return "travel";
+  if (has("food|dining|restaurants?|snacks?|groceries|grocery|meals?")) return "food";
+  if (has("shopping|clothing|clothes|electronics|gifts?|souvenirs?")) return "shopping";
+  if (has("fun|movies?|outings?|hobbies|hobby|activit(y|ies)|tickets?|sightseeing")) return "activities";
   return "other";
 }
 

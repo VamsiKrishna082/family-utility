@@ -84,6 +84,9 @@ test("directions, heads, buckets, UPI", () => {
   assert.equal(budgetBucket("Travel", "Stays"), "stay");
   assert.equal(budgetBucket("Transport", "Fuel"), "travel");
   assert.equal(budgetBucket("Food & dining", "Dining out"), "food");
+  assert.equal(budgetBucket("Electronics", "Tripod"), "shopping");
+  assert.equal(budgetBucket("Miscellaneous", "Tripod"), "other");
+  assert.equal(budgetBucket("Fees", "Business registration"), "other");
   assert.match(upiLink("ravi@okicici", "Ravi", 6000, "Goa trip"), /^upi:\/\/pay\?pa=ravi%40okicici&pn=Ravi&am=6000\.00&cu=INR&tn=Goa\+trip$/);
 });
 
