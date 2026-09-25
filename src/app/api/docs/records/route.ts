@@ -32,6 +32,7 @@ const Body = z.object({
   coverAmountPaise: z.number().int().positive().optional(),
   notes: z.string().trim().max(1000).optional(),
   tags: z.array(z.string().trim().min(1).max(30)).default([]),
+  folderId: z.string().min(1).optional(),
 });
 
 export async function POST(req: Request) {
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
 
     const catSnap = await db().collection("doc_categories").doc(body.categoryId).get();
     if (!catSnap.exists) throw new Error("Unknown category");
+    if (body.folderId && !(await db().collection("doc_folders").doc(body.folderId).get()).exists) throw new Error("That folder no longer exists");
 
     const ref = db().collection("doc_records").doc();
     const now = Date.now();
@@ -60,6 +62,8 @@ export async function POST(req: Request) {
       coverAmountPaise: body.coverAmountPaise,
       notes: body.notes,
       tags: body.tags,
+      ...(body.folderId ? { folderId: body.folderId } : {}),
+      attachments: [],
       versions: [version],
       archived: false,
       createdBy: user.email,

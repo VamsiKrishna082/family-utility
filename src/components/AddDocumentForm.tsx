@@ -1,27 +1,35 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { X, Plus, Upload } from "lucide-react";
+import { X, Plus, Upload, Paperclip } from "lucide-react";
 import { uploadOneOrFind } from "@/lib/upload";
 import { parseRupeesToPaise } from "@/lib/money";
-import { DOC_EXPIRY_LABELS, DOC_OWNERS, type DocCategory, type DocExpiryLabel, type DocOwner } from "@/lib/types";
+import { folderOptions } from "@/lib/docFolders";
+import { DOC_EXPIRY_LABELS, DOC_OWNERS, type DocCategory, type DocExpiryLabel, type DocFolder, type DocOwner } from "@/lib/types";
 
 const OWNER_LABEL: Record<DocOwner, string> = { yours: "Vamsi", hers: "Varshini", common: "Common", parents: "Parents" };
 const EXPIRY_VERB: Record<DocExpiryLabel, string> = { renew: "Renew on", expires: "Expires on", keep_till: "Keep till" };
 
 export function AddDocumentForm({
   categories,
+  folders,
+  initialFolderId,
   onClose,
   onSaved,
   onCreateCategory,
 }: {
   categories: DocCategory[];
+  folders: DocFolder[];
+  initialFolderId: string | null;
   onClose: () => void;
   onSaved: () => void;
   onCreateCategory: (name: string) => Promise<DocCategory | null>;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  // First file is the document itself; any more are kept with it as extra files.
+  const [files, setFiles] = useState<File[]>([]);
+  const file = files[0] ?? null;
+  const [folderId, setFolderId] = useState(initialFolderId ?? "");
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(categories[0]?.id ?? null);
   const [owner, setOwner] = useState<DocOwner>("common");
@@ -40,9 +48,11 @@ export function AddDocumentForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const pickFile = (f: File | null) => {
-    setFile(f);
-    if (f && !name) setName(f.name.replace(/\.[^.]+$/, ""));
+  const pickFiles = (list: FileList | null) => {
+    if (!list?.length) return;
+    const next = [...files, ...[...list].filter((f) => !files.some((x) => x.name === f.name && x.size === f.size))];
+    setFiles(next);
+    if (next[0] && !name) setName(next[0].name.replace(/\.[^.]+$/, ""));
   };
 
   const createCategory = async () => {
@@ -68,8 +78,17 @@ export function AddDocumentForm({
     setSaving(true);
     setError("");
     try {
+      // Progress across all files, weighted by size.
+      const total = files.reduce((s, f) => s + f.size, 0) || 1;
+      let doneBytes = 0;
+      const uploaded: { driveFileId: string; f: File }[] = [];
       setUploadPct(0);
-      const driveFileId = await uploadOneOrFind(file, null, (pct) => setUploadPct(pct), "/api/docs/uploads/session", "/api/docs/uploads/find");
+      for (const f of files) {
+        const id = await uploadOneOrFind(f, null, (pct) => setUploadPct(Math.round(((doneBytes + (f.size * pct) / 100) / total) * 100)), "/api/docs/uploads/session", "/api/docs/uploads/find");
+        doneBytes += f.size;
+        uploaded.push({ driveFileId: id, f });
+      }
+      const driveFileId = uploaded[0].driveFileId;
 
       const coverAmountPaise = coverAmount.trim() ? parseRupeesToPaise(coverAmount) : undefined;
       const res = await fetch("/api/docs/records", {
@@ -89,9 +108,19 @@ export function AddDocumentForm({
           coverAmountPaise: coverAmountPaise ?? undefined,
           notes: notes.trim() || undefined,
           tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
+          ...(folderId ? { folderId } : {}),
         }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not save");
+      if (uploaded.length > 1) {
+        const { record: { id } } = (await res.json()) as { record: { id: string } };
+        const more = await fetch(`/api/docs/records/${id}/files`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: uploaded.slice(1).map(({ driveFileId: d, f }) => ({ driveFileId: d, name: f.name, mimeType: f.type || "application/octet-stream", sizeBytes: f.size })) }),
+        });
+        if (!more.ok) throw new Error("Saved the document, but the extra files didn't attach — add them from the document page");
+      }
       onSaved();
       onClose();
     } catch (e) {
@@ -118,22 +147,44 @@ export function AddDocumentForm({
           <input
             ref={fileInput}
             type="file"
+            multiple
             hidden
-            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => { pickFiles(e.target.files); e.target.value = ""; }}
           />
+          {files.length > 0 && (
+            <div style={{ border: "1px solid var(--line2)", borderRadius: 10 }}>
+              {files.map((f, i) => (
+                <div key={`${f.name}-${f.size}`} className="flex items-center gap-2 px-3 py-2" style={{ borderTop: i ? "1px solid var(--line2)" : "none", fontSize: 13.5 }}>
+                  {i === 0 ? <Upload size={14} color="var(--faint)" /> : <Paperclip size={14} color="var(--faint)" />}
+                  <span className="flex-1 min-w-0 truncate">{f.name}</span>
+                  <span style={{ fontSize: 11.5, color: "var(--faint)", flexShrink: 0 }}>{i === 0 ? "main file" : "extra file"}</span>
+                  {!saving && <button onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}><X size={13} color="var(--faint)" /></button>}
+                </div>
+              ))}
+            </div>
+          )}
           <button
             onClick={() => fileInput.current?.click()}
             className="flex items-center gap-2"
-            style={{ padding: "12px 14px", borderRadius: 10, border: `1px dashed var(--line)`, fontSize: 14, color: file ? "var(--ink)" : "var(--faint)", textAlign: "left" }}
+            style={{ padding: "12px 14px", borderRadius: 10, border: `1px dashed var(--line)`, fontSize: 14, color: "var(--faint)", textAlign: "left" }}
+            disabled={saving}
           >
             <Upload size={16} />
-            {file ? file.name : "Choose a file to upload"}
+            {files.length ? "Add more files to this document" : "Choose file(s) — pick several to keep them together"}
           </button>
 
           <input
             type="text" placeholder="Document name" value={name} onChange={(e) => setName(e.target.value)}
             style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "10px 12px", fontSize: 14 }}
           />
+
+          <select
+            aria-label="Folder" value={folderId} onChange={(e) => setFolderId(e.target.value)}
+            style={{ borderRadius: 10, border: "1px solid var(--line)", padding: "10px 12px", fontSize: 14 }}
+          >
+            <option value="">No folder (top level)</option>
+            {folderOptions(folders).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
 
           <div className="flex gap-2 flex-wrap">
             <select

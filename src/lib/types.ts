@@ -396,10 +396,34 @@ export type DocVersion = {
   addedAt: number;
 };
 
+/** An in-app folder for organising documents (e.g. "TCS docs" → "Payslips", "PF"). Folders are metadata only — files stay where they are in Drive. */
+export type DocFolder = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdBy: string;
+  createdAt: number;
+};
+export type DocFoldersResponse = { items: DocFolder[] };
+
+/** An extra file attached to a document (the main file keeps its own version history). */
+export type DocFile = {
+  driveFileId: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  addedBy: string;
+  addedAt: number;
+};
+
 export type DocRecord = {
   id: string;
   name: string;
   categoryId: string;
+  /** The folder it's filed in; unset = top level. */
+  folderId?: string;
+  /** Extra files beyond the main one (e.g. passport front + back). */
+  attachments?: DocFile[];
   owner: DocOwner;
   currentDriveFileId: string;
   mimeType: string;

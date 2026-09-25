@@ -31,6 +31,8 @@ const Body = z.object({
   notes: z.string().trim().max(1000).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(30)).optional(),
   archived: z.boolean().optional(),
+  /** null moves it to the top level. */
+  folderId: z.string().min(1).nullable().optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -38,6 +40,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     await requireUser();
     const { id } = await ctx.params;
     const patch = Body.parse(await req.json());
+    if (patch.folderId && !(await db().collection("doc_folders").doc(patch.folderId).get()).exists) throw new Error("That folder no longer exists");
     // undefined fields are stripped on write (ignoreUndefinedProperties) and
     // left untouched by the merge; an explicit null clears that field.
     await db().collection("doc_records").doc(id).set({ ...patch, updatedAt: Date.now() }, { merge: true });
@@ -57,7 +60,8 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     if (!snap.exists) return ok({ id });
     const record = snap.data() as DocRecord;
 
-    await Promise.all(record.versions.map((v) => trashFile(v.driveFileId).catch(() => undefined)));
+    const files = [...record.versions.map((v) => v.driveFileId), ...(record.attachments ?? []).map((a) => a.driveFileId)];
+    await Promise.all(files.map((f) => trashFile(f).catch(() => undefined)));
     await ref.set({ archived: true, updatedAt: Date.now() }, { merge: true });
     return ok({ id });
   } catch (e) {

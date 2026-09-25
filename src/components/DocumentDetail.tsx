@@ -3,11 +3,12 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ChevronLeft, Download, Share2, Upload, Pencil, Trash2, Copy, X } from "lucide-react";
+import { ChevronLeft, Download, Share2, Upload, Pencil, Trash2, Copy, X, Paperclip, Plus, FileText } from "lucide-react";
 import { uploadOneOrFind } from "@/lib/upload";
 import { formatPaiseExact, parseRupeesToPaise } from "@/lib/money";
 import { OWNER_LABEL, EXPIRY_VERB } from "@/components/DocumentsDashboard";
-import { DOC_EXPIRY_LABELS, DOC_OWNERS, type DocCategoriesResponse, type DocExpiryLabel, type DocOwner, type DocRecordResponse, type DocSharesResponse } from "@/lib/types";
+import { folderOptions, folderPath } from "@/lib/docFolders";
+import { DOC_EXPIRY_LABELS, DOC_OWNERS, type DocCategoriesResponse, type DocExpiryLabel, type DocFoldersResponse, type DocOwner, type DocRecordResponse, type DocSharesResponse } from "@/lib/types";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url);
@@ -29,7 +30,12 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
   const { data, error, isLoading, mutate } = useSWR<DocRecordResponse>(`/api/docs/records/${id}`, fetcher);
   const { data: catData } = useSWR<DocCategoriesResponse>("/api/docs/categories", fetcher);
   const { data: sharesData, mutate: mutateShares } = useSWR<DocSharesResponse>(`/api/docs/records/${id}/share`, fetcher);
+  const { data: folderData } = useSWR<DocFoldersResponse>("/api/docs/folders", fetcher);
   const replaceInput = useRef<HTMLInputElement>(null);
+  const filesInput = useRef<HTMLInputElement>(null);
+  const [addingFiles, setAddingFiles] = useState<{ done: number; total: number; pct: number } | null>(null);
+  const [filesError, setFilesError] = useState("");
+  const [draftFolderId, setDraftFolderId] = useState("");
 
   const [editing, setEditing] = useState(false);
   const [shareOpen, setShareOpen] = useState(openShareOnLoad);
@@ -59,9 +65,13 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
   const isPdf = record.mimeType === "application/pdf";
   const isImage = record.mimeType.startsWith("image/");
   const fileUrl = `/api/docs/file/${record.currentDriveFileId}`;
+  const folders = folderData?.items ?? [];
+  const attachments = record.attachments ?? [];
+  const inFolder = record.folderId ? folderPath(folders, record.folderId) : "";
 
   const startEdit = () => {
     setDraftCategoryId(record.categoryId);
+    setDraftFolderId(record.folderId ?? "");
     setDraftOwner(record.owner);
     setDraftExpiry(record.expiryDate ?? "");
     setDraftExpiryLabel(record.expiryLabel ?? "expires");
@@ -82,6 +92,7 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           categoryId: draftCategoryId,
+          folderId: draftFolderId || null,
           owner: draftOwner,
           expiryDate: draftExpiry || null,
           expiryLabel: draftExpiry ? draftExpiryLabel : null,
@@ -122,6 +133,40 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
     }
   };
 
+  /** Upload several files and keep them with this document. */
+  const addFiles = async (list: File[]) => {
+    if (!list.length) return;
+    setFilesError("");
+    const uploaded: { driveFileId: string; name: string; mimeType: string; sizeBytes: number }[] = [];
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        setAddingFiles({ done: i, total: list.length, pct: 0 });
+        const driveFileId = await uploadOneOrFind(f, null, (pct) => setAddingFiles({ done: i, total: list.length, pct }), "/api/docs/uploads/session", "/api/docs/uploads/find");
+        uploaded.push({ driveFileId, name: f.name, mimeType: f.type || "application/octet-stream", sizeBytes: f.size });
+      }
+    } catch (e) {
+      setFilesError(`${e instanceof Error ? e.message : "Upload failed"}${uploaded.length ? ` — the ${uploaded.length} file(s) before it were kept` : ""}`);
+    }
+    try {
+      if (uploaded.length) {
+        const res = await fetch(`/api/docs/records/${id}/files`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: uploaded }) });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not attach the files");
+      }
+      await mutate();
+    } catch (e) {
+      setFilesError(e instanceof Error ? e.message : "Could not attach the files");
+    } finally {
+      setAddingFiles(null);
+    }
+  };
+
+  const removeFile = async (driveFileId: string, name: string) => {
+    if (!window.confirm(`Remove "${name}" from this document? It goes to Drive's trash, where it can be restored for 30 days.`)) return;
+    await fetch(`/api/docs/records/${id}/files?file=${encodeURIComponent(driveFileId)}`, { method: "DELETE" });
+    await mutate();
+  };
+
   const createShare = async (days: number) => {
     setCreatingShare(true);
     try {
@@ -156,7 +201,7 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
         <div className="flex-1" style={{ minWidth: 160 }}>
           <h1 className="display" style={{ fontSize: 26 }}>{record.name}</h1>
           <p style={{ color: "var(--dim)", fontSize: 13.5, marginTop: 4 }}>
-            {category?.name ?? "Uncategorised"} · {OWNER_LABEL[record.owner]} · updated {new Date(record.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+            {inFolder ? `${inFolder} · ` : ""}{category?.name ?? "Uncategorised"} · {OWNER_LABEL[record.owner]} · updated {new Date(record.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
           </p>
         </div>
         <div className="flex gap-2 shrink-0" style={{ marginLeft: "auto" }}>
@@ -200,6 +245,10 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
 
             {editing ? (
               <div style={{ display: "grid", gap: 10 }}>
+                <select aria-label="Folder" value={draftFolderId} onChange={(e) => setDraftFolderId(e.target.value)} style={{ borderRadius: 8, border: "1px solid var(--line)", padding: "8px 10px", fontSize: 13.5 }}>
+                  <option value="">No folder (top level)</option>
+                  {folderOptions(folders).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                </select>
                 <select value={draftCategoryId} onChange={(e) => setDraftCategoryId(e.target.value)} style={{ borderRadius: 8, border: "1px solid var(--line)", padding: "8px 10px", fontSize: 13.5 }}>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -227,6 +276,7 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
               </div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
+                <Row label="Folder" value={inFolder || "Top level"} />
                 <Row label="Category" value={category?.name ?? "—"} />
                 <Row label="Belongs to" value={OWNER_LABEL[record.owner]} />
                 {record.issuer && <Row label="Issuer" value={record.issuer} />}
@@ -246,6 +296,34 @@ export function DocumentDetail({ id, openShareOnLoad }: { id: string; openShareO
                 )}
               </div>
             )}
+          </div>
+
+          {/* Files: the main one plus any kept with it */}
+          <div className="card" style={{ padding: 20 }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="display" style={{ fontSize: 18 }}>Files <span style={{ fontSize: 13, color: "var(--faint)" }}>{1 + attachments.length}</span></p>
+              <input ref={filesInput} type="file" multiple hidden onChange={(e) => { const l = [...(e.target.files ?? [])]; e.target.value = ""; addFiles(l); }} />
+              <button onClick={() => filesInput.current?.click()} disabled={!!addingFiles} className="flex items-center gap-1" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--indigo)" }}>
+                <Plus size={13} /> {addingFiles ? `Uploading ${addingFiles.done + 1} of ${addingFiles.total} · ${addingFiles.pct}%` : "Add files"}
+              </button>
+            </div>
+            <div className="flex items-center gap-2" style={{ padding: "9px 0", fontSize: 13.5 }}>
+              <FileText size={14} color="var(--faint)" style={{ flexShrink: 0 }} />
+              <span className="flex-1 min-w-0 truncate" style={{ fontWeight: 600 }}>Main file</span>
+              <span style={{ fontSize: 11.5, color: "var(--faint)" }}>{formatBytes(record.sizeBytes)}</span>
+              <a href={fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--indigo)" }}>Open</a>
+            </div>
+            {attachments.map((a) => (
+              <div key={a.driveFileId} className="flex items-center gap-2" style={{ padding: "9px 0", borderTop: "1px solid var(--line2)", fontSize: 13.5 }}>
+                <Paperclip size={14} color="var(--faint)" style={{ flexShrink: 0 }} />
+                <span className="flex-1 min-w-0 truncate" title={a.name}>{a.name}</span>
+                <span style={{ fontSize: 11.5, color: "var(--faint)", flexShrink: 0 }}>{formatBytes(a.sizeBytes)}</span>
+                <a href={`/api/docs/file/${a.driveFileId}`} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 600, color: "var(--indigo)", flexShrink: 0 }}>Open</a>
+                <button onClick={() => removeFile(a.driveFileId, a.name)} aria-label={`Remove ${a.name}`} style={{ padding: 4, flexShrink: 0 }}><Trash2 size={13} color="var(--faint)" /></button>
+              </div>
+            ))}
+            {attachments.length === 0 && <p style={{ fontSize: 12.5, color: "var(--faint)", paddingTop: 4 }}>Keep related files together here — e.g. every page of a policy, or all payslips for a year.</p>}
+            {filesError && <p style={{ fontSize: 12.5, color: "var(--red)", paddingTop: 6 }}>{filesError}</p>}
           </div>
 
           {/* Versions */}

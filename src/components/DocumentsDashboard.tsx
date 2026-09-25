@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
-import { ChevronLeft, Search, Plus, FileText, Download, Share2, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Plus, FileText, Download, Share2, Clock, Folder, FolderPlus, Upload, Pencil, Trash2, Paperclip } from "lucide-react";
 import { AddDocumentForm } from "@/components/AddDocumentForm";
-import type { DocCategoriesResponse, DocCategory, DocExpiryLabel, DocOwner, DocRecord, DocRecordsResponse, DriveQuota } from "@/lib/types";
+import { UploadManyForm } from "@/components/UploadManyForm";
+import { descendants, folderChain, folderPath } from "@/lib/docFolders";
+import type { DocCategoriesResponse, DocCategory, DocExpiryLabel, DocFoldersResponse, DocOwner, DocRecord, DocRecordsResponse, DriveQuota } from "@/lib/types";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url);
@@ -62,15 +64,74 @@ export function DocumentsDashboard() {
   const { data: catData, mutate: mutateCats } = useSWR<DocCategoriesResponse>("/api/docs/categories", fetcher);
   const { data: recData, mutate: mutateRecs } = useSWR<DocRecordsResponse>("/api/docs/records", fetcher);
   const { data: quotaData } = useSWR<DriveQuota>("/api/docs/quota", fetcher);
+  const { data: folderData, mutate: mutateFolders } = useSWR<DocFoldersResponse>("/api/docs/folders", fetcher);
   const { mutate: globalMutate } = useSWRConfig();
 
   const [ownerFilter, setOwnerFilter] = useState<DocOwner | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  const [uploadingMany, setUploadingMany] = useState(false);
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [folderForm, setFolderForm] = useState<{ mode: "new" | "rename"; name: string } | null>(null);
+  const [folderBusy, setFolderBusy] = useState(false);
+  const [folderError, setFolderError] = useState("");
 
   const categories = catData?.items ?? [];
   const records = recData?.items ?? [];
+  const folders = folderData?.items ?? [];
+  const currentFolder = folderId ? folders.find((f) => f.id === folderId) ?? null : null;
+  const chain = folderChain(folders, folderId);
+  const subFolders = folders.filter((f) => f.parentId === folderId).sort((a, b) => a.name.localeCompare(b.name));
+
+  /** Documents anywhere inside each folder (sub-folders included). */
+  const folderCounts = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const f of folders) {
+      const inside = descendants(folders, f.id);
+      out.set(f.id, records.filter((r) => r.folderId && inside.has(r.folderId)).length);
+    }
+    return out;
+  }, [folders, records]);
+
+  const openFolder = (id: string | null) => {
+    setFolderId(id);
+    setFolderForm(null);
+    setFolderError("");
+    setSearch("");
+  };
+
+  const saveFolder = async () => {
+    if (!folderForm?.name.trim()) return;
+    setFolderBusy(true);
+    setFolderError("");
+    try {
+      const res = folderForm.mode === "new"
+        ? await fetch("/api/docs/folders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: folderForm.name.trim(), parentId: folderId }) })
+        : await fetch(`/api/docs/folders/${folderId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: folderForm.name.trim() }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Could not save the folder");
+      await mutateFolders();
+      setFolderForm(null);
+    } catch (e) {
+      setFolderError(e instanceof Error ? e.message : "Could not save the folder");
+    } finally {
+      setFolderBusy(false);
+    }
+  };
+
+  const deleteFolder = async () => {
+    if (!currentFolder) return;
+    const where = currentFolder.parentId ? `"${folderPath(folders, currentFolder.parentId)}"` : "the top level";
+    if (!window.confirm(`Remove the folder "${currentFolder.name}"? Nothing is deleted — its documents and sub-folders move up to ${where}.`)) return;
+    setFolderBusy(true);
+    try {
+      await fetch(`/api/docs/folders/${currentFolder.id}`, { method: "DELETE" });
+      await Promise.all([mutateFolders(), mutateRecs()]);
+      openFolder(currentFolder.parentId);
+    } finally {
+      setFolderBusy(false);
+    }
+  };
 
   const createCategory = async (name: string): Promise<DocCategory | null> => {
     const res = await fetch("/api/docs/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
@@ -94,15 +155,19 @@ export function DocumentsDashboard() {
     [records],
   );
 
+  // Search, or a category picked at the top level, looks across every folder;
+  // otherwise you see what sits directly in the folder you're in.
+  const q = search.trim().toLowerCase();
+  const spanning = Boolean(q) || (folderId === null && categoryFilter !== null);
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return records.filter((r) => {
+      if (!spanning && (r.folderId ?? null) !== folderId) return false;
       if (ownerFilter && r.owner !== ownerFilter) return false;
       if (categoryFilter && r.categoryId !== categoryFilter) return false;
       if (q && !r.name.toLowerCase().includes(q) && !r.tags.some((t) => t.toLowerCase().includes(q)) && !(r.refNumberMasked ?? "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [records, ownerFilter, categoryFilter, search]);
+  }, [records, ownerFilter, categoryFilter, q, spanning, folderId]);
 
   const activeCategoryName = categoryFilter ? categories.find((c) => c.id === categoryFilter)?.name : null;
 
@@ -126,6 +191,9 @@ export function DocumentsDashboard() {
               style={{ border: "none", outline: "none", background: "transparent", fontSize: 14, padding: "0 8px", width: 180 }}
             />
           </div>
+          <button className="btn btn-plain flex items-center gap-1.5" onClick={() => setUploadingMany(true)} aria-label="Upload many files">
+            <Upload size={15} /> <span className="hidden sm:inline">Upload files</span>
+          </button>
           <button className="btn btn-dark flex items-center gap-1.5" onClick={() => setAdding(true)}>
             <Plus size={15} /> <span className="hidden sm:inline">Add document</span>
           </button>
@@ -197,14 +265,88 @@ export function DocumentsDashboard() {
 
         {/* Documents grid */}
         <div>
+          {/* Folders: breadcrumbs, actions, sub-folders */}
+          <div className="flex items-center gap-1 mb-3" style={{ flexWrap: "wrap", fontSize: 13.5 }}>
+            <button onClick={() => openFolder(null)} style={{ fontWeight: folderId === null ? 700 : 500, color: folderId === null ? "var(--ink)" : "var(--dim)", padding: "6px 4px" }}>
+              All folders
+            </button>
+            {chain.map((f) => (
+              <span key={f.id} className="flex items-center gap-1">
+                <ChevronRight size={14} color="var(--faint)" />
+                <button onClick={() => openFolder(f.id)} style={{ fontWeight: f.id === folderId ? 700 : 500, color: f.id === folderId ? "var(--ink)" : "var(--dim)", padding: "6px 4px" }}>
+                  {f.name}
+                </button>
+              </span>
+            ))}
+            <div className="flex items-center gap-1" style={{ marginLeft: "auto" }}>
+              <button className="btn btn-plain flex items-center gap-1" style={{ fontSize: 12.5, padding: "6px 10px" }} onClick={() => { setFolderError(""); setFolderForm({ mode: "new", name: "" }); }}>
+                <FolderPlus size={14} /> {folderId ? "New sub-folder" : "New folder"}
+              </button>
+              {currentFolder && (
+                <>
+                  <button className="btn btn-plain flex items-center" style={{ padding: "6px 9px" }} aria-label="Rename folder" onClick={() => { setFolderError(""); setFolderForm({ mode: "rename", name: currentFolder.name }); }}>
+                    <Pencil size={14} />
+                  </button>
+                  <button className="btn btn-plain flex items-center" style={{ padding: "6px 9px", color: "var(--red)" }} aria-label="Remove folder" onClick={deleteFolder} disabled={folderBusy}>
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {folderForm && (
+            <div className="card flex items-center gap-2 mb-3" style={{ padding: 10 }}>
+              <Folder size={16} color="var(--faint)" />
+              <input
+                autoFocus type="text" value={folderForm.name} maxLength={80}
+                placeholder={folderForm.mode === "new" ? (currentFolder ? `Sub-folder inside ${currentFolder.name}, e.g. Payslips` : "Folder name, e.g. TCS docs") : "Folder name"}
+                onChange={(e) => setFolderForm({ ...folderForm, name: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") saveFolder(); if (e.key === "Escape") setFolderForm(null); }}
+                className="flex-1" style={{ border: "none", outline: "none", fontSize: 14, background: "transparent", minWidth: 0 }}
+              />
+              <button className="btn btn-plain" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={() => setFolderForm(null)}>Cancel</button>
+              <button className="btn btn-dark" style={{ padding: "6px 10px", fontSize: 12.5 }} onClick={saveFolder} disabled={!folderForm.name.trim() || folderBusy}>
+                {folderBusy ? "Saving…" : folderForm.mode === "new" ? "Create" : "Rename"}
+              </button>
+            </div>
+          )}
+          {folderError && <p style={{ color: "var(--red)", fontSize: 13, marginBottom: 10 }}>{folderError}</p>}
+
+          {!spanning && subFolders.length > 0 && (
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginBottom: 18 }}>
+              {subFolders.map((f) => {
+                const subCount = folders.filter((x) => x.parentId === f.id).length;
+                const docCount = folderCounts.get(f.id) ?? 0;
+                return (
+                  <button key={f.id} onClick={() => openFolder(f.id)} className="card flex items-center gap-3" style={{ padding: "12px 14px", textAlign: "left" }}>
+                    <Folder size={22} color="#8A5A0B" fill="#F6EBD8" strokeWidth={1.6} style={{ flexShrink: 0 }} />
+                    <span className="min-w-0">
+                      <span className="truncate" style={{ display: "block", fontSize: 14, fontWeight: 700 }}>{f.name}</span>
+                      <span style={{ display: "block", fontSize: 11.5, color: "var(--faint)" }}>
+                        {docCount} document{docCount === 1 ? "" : "s"}{subCount ? ` · ${subCount} folder${subCount === 1 ? "" : "s"}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex items-baseline justify-between mb-3">
-            <p className="display" style={{ fontSize: 20 }}>{activeCategoryName ?? "All documents"}{ownerFilter ? ` · ${OWNER_LABEL[ownerFilter]}` : ""}</p>
-            <p style={{ fontSize: 12.5, color: "var(--faint)" }}>{filtered.length} shown</p>
+            <p className="display" style={{ fontSize: 20 }}>
+              {q ? "Search results" : activeCategoryName ?? currentFolder?.name ?? "All documents"}{ownerFilter ? ` · ${OWNER_LABEL[ownerFilter]}` : ""}
+            </p>
+            <p style={{ fontSize: 12.5, color: "var(--faint)" }}>{filtered.length} shown{spanning && folders.length ? " · all folders" : ""}</p>
           </div>
 
           {filtered.length === 0 ? (
             <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--faint)", fontSize: 14 }}>
-              {records.length === 0 ? "No documents yet — add your first one." : "Nothing matches these filters."}
+              {records.length === 0
+                ? "No documents yet — add your first one."
+                : !spanning && currentFolder
+                  ? subFolders.length ? "No documents directly in this folder — open a sub-folder above, or add some here." : "This folder is empty — use Upload files or Add document to fill it."
+                  : !spanning && !ownerFilter && !categoryFilter && folders.length ? "Everything is inside folders — open one above." : "Nothing matches these filters."}
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16, gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" }}>
@@ -222,7 +364,15 @@ export function DocumentsDashboard() {
                     </div>
                     <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
                       <p className="truncate" style={{ fontSize: 14.5, fontWeight: 700 }}>{r.name}</p>
-                      <p style={{ fontSize: 11.5, color: "var(--faint)" }}>{r.mimeType.split("/")[1]?.toUpperCase() ?? "FILE"} · {formatBytes(r.sizeBytes)}</p>
+                      <p className="flex items-center gap-1" style={{ fontSize: 11.5, color: "var(--faint)" }}>
+                        {r.mimeType.split("/")[1]?.toUpperCase() ?? "FILE"} · {formatBytes(r.sizeBytes)}
+                        {(r.attachments?.length ?? 0) > 0 && <><span>·</span><Paperclip size={11} /> +{r.attachments!.length} file{r.attachments!.length === 1 ? "" : "s"}</>}
+                      </p>
+                      {spanning && r.folderId && (
+                        <button onClick={() => openFolder(r.folderId!)} className="flex items-center gap-1 truncate" style={{ fontSize: 11.5, color: "var(--dim)", textAlign: "left" }}>
+                          <Folder size={11} style={{ flexShrink: 0 }} /> <span className="truncate">{folderPath(folders, r.folderId)}</span>
+                        </button>
+                      )}
                       {exp && <p style={{ fontSize: 11.5, fontWeight: exp.urgent ? 700 : 500, color: exp.urgent ? "var(--red)" : "var(--faint)" }}>{exp.text}</p>}
                       <div className="flex gap-1.5" style={{ marginTop: "auto", paddingTop: 6 }}>
                         <Link href={`/docs/${r.id}`} className="btn btn-plain flex-1 flex items-center justify-center" style={{ height: 44, fontSize: 12.5 }}>
@@ -247,9 +397,20 @@ export function DocumentsDashboard() {
       {adding && (
         <AddDocumentForm
           categories={categories}
+          folders={folders}
+          initialFolderId={folderId}
           onClose={() => setAdding(false)}
           onSaved={() => { mutateRecs(); globalMutate("/api/docs/quota"); }}
           onCreateCategory={createCategory}
+        />
+      )}
+      {uploadingMany && (
+        <UploadManyForm
+          categories={categories}
+          folders={folders}
+          initialFolderId={folderId}
+          onClose={() => setUploadingMany(false)}
+          onSaved={() => { mutateRecs(); globalMutate("/api/docs/quota"); }}
         />
       )}
     </div>
