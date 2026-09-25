@@ -7,6 +7,7 @@ import { ChevronLeft, Pencil, Trash2, Search, Tag, X } from "lucide-react";
 import { formatPaise } from "@/lib/money";
 import { MONEY_TX_TYPES, type MoneyCategoriesResponse, type MoneyTx, type MoneyTxListResponse, type MoneyTxType } from "@/lib/types";
 import { MoneyQuickAdd } from "@/components/MoneyQuickAdd";
+import type { TripsResponse } from "@/lib/trips/types";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url);
@@ -40,6 +41,8 @@ export function MoneyTransactionList({ initialMonth, initialType }: { initialMon
 
   const { data, mutate, isLoading } = useSWR<MoneyTxListResponse>(`/api/money/tx?${params}`, fetcher);
   const { data: catData } = useSWR<MoneyCategoriesResponse>("/api/money/categories", fetcher);
+  const { data: tripsData } = useSWR<TripsResponse>("/api/trips", fetcher);
+  const tripName = useMemo(() => new Map((tripsData?.items ?? []).map((t) => [t.id, t.name])), [tripsData]);
   const categories = catData?.items ?? [];
   const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
 
@@ -129,7 +132,11 @@ export function MoneyTransactionList({ initialMonth, initialType }: { initialMon
             <div key={tx.id} className="group flex items-center gap-3 px-4 py-3" style={{ borderTop: i === 0 ? "none" : "1px solid var(--line2)" }}>
               <span style={{ width: 8, height: 8, borderRadius: 8, background: typeColor[tx.type], flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, color: "var(--faint)", width: 44, flexShrink: 0 }}>{tx.date.slice(5)}</span>
-              <span className="truncate" style={{ fontSize: 14, width: 150, flexShrink: 0 }}>{[categoryName.get(tx.categoryId) ?? "—", tx.subcategory].filter(Boolean).join(" · ")}</span>
+              <span className="truncate" style={{ fontSize: 14, width: 150, flexShrink: 0 }}>{[categoryName.get(tx.categoryId) ?? "—", tx.subcategory].filter(Boolean).join(" · ")}
+                {tx.tripId && tripName.get(tx.tripId) && (
+                  <Link href={`/trips/${tx.tripId}`} className="block truncate" style={{ fontSize: 11.5, color: "var(--indigo)", fontWeight: 600 }}>✈ {tripName.get(tx.tripId)}</Link>
+                )}
+              </span>
               <span className="truncate flex-1" style={{ fontSize: 13.5, color: "var(--dim)" }}>{tx.note}</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: typeColor[tx.type], flexShrink: 0 }}>
                 {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : ""}{formatPaise(tx.amountPaise)}

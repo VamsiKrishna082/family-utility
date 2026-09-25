@@ -1,5 +1,5 @@
-import { TripsBrowser } from "@/components/TripsBrowser";
+import { TripsHome } from "@/components/trips/TripsHome";
 
 export default function TripsPage() {
-  return <TripsBrowser />;
+  return <TripsHome />;
 }

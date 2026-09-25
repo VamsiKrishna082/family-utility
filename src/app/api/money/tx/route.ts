@@ -56,6 +56,7 @@ const Body = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   categoryId: z.string().min(1),
   subcategory: z.string().max(60).optional(),
+  tripId: z.string().min(1).max(60).optional(),
   note: z.string().max(300).default(""),
   mode: z.enum(MONEY_MODES).optional(),
   cardId: z.string().optional(),
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
     const category = catSnap.data() as MoneyCategory;
     const subcategory = normalizeSubcategory(body.subcategory, category.subcategories);
     if (!subcategory) throw new Error("Pick or type a sub-category");
+    if (body.tripId && !(await db().collection("trips").doc(body.tripId).get()).exists) throw new Error("That trip no longer exists");
 
     const settings = await getSettings();
     const monthKey = computeMonthKey(body.date, settings.monthStartDay);
@@ -88,6 +90,7 @@ export async function POST(req: Request) {
       monthKey,
       categoryId: body.categoryId,
       subcategory,
+      ...(body.tripId ? { tripId: body.tripId } : {}),
       note: body.note,
       mode: body.mode,
       cardId: body.cardId,

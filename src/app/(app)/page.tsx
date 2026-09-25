@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SECTIONS } from "@/lib/sections";
 import { OnThisDay } from "@/components/OnThisDay";
 import { UpcomingDates } from "@/components/dates/UpcomingDates";
+import { TripMemories } from "@/components/trips/TripMemories";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -59,6 +60,7 @@ export default function Launcher() {
       </div>
 
       <UpcomingDates />
+      <TripMemories />
       <OnThisDay />
     </div>
   );

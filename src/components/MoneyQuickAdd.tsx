@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
-import { X, Plus, CreditCard } from "lucide-react";
+import { X, Plus, CreditCard, Plane } from "lucide-react";
 import { normalizeSubcategory, parseRupeesToPaise } from "@/lib/money";
+import type { TripsResponse } from "@/lib/trips/types";
 import { MONEY_MODES, type MoneyCard, type MoneyCardsResponse, type MoneyCategory, type MoneyTx, type MoneyTxType } from "@/lib/types";
 
 const fetcher = async (url: string) => {
@@ -38,6 +39,8 @@ export function MoneyQuickAdd({
   editing,
   initialCreditCard,
   initialCardId,
+  initialTripId,
+  initialDate,
 }: {
   onClose: () => void;
   onSaved: () => void;
@@ -47,6 +50,9 @@ export function MoneyQuickAdd({
   /** Opens straight into the "paid by credit card" state — used by the Credit cards page's own "Log a spend" button. */
   initialCreditCard?: boolean;
   initialCardId?: string;
+  /** Opens with this trip selected — used by a trip's own "Add expense". */
+  initialTripId?: string;
+  initialDate?: string;
 }) {
   const [type, setType] = useState<MoneyTxType>(editing?.type ?? "expense");
   const [amount, setAmount] = useState(editing ? String(editing.amountPaise / 100) : "");
@@ -58,7 +64,14 @@ export function MoneyQuickAdd({
     setCategoryIdRaw(id);
   };
   const [note, setNote] = useState(editing?.note ?? "");
-  const [date, setDate] = useState(editing?.date ?? todayISO());
+  const [date, setDate] = useState(editing?.date ?? initialDate ?? todayISO());
+  const [tripId, setTripId] = useState<string | null>(editing?.tripId ?? initialTripId ?? null);
+  const { data: tripsData } = useSWR<TripsResponse>("/api/trips", fetcher);
+  // Trips worth offering: ideas, upcoming, ongoing, and ones that ended in the last 60 days — plus whatever this entry already points at.
+  const tripChoices = useMemo(() => {
+    const cutoff = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
+    return (tripsData?.items ?? []).filter((t) => t.id === tripId || !t.endDate || t.endDate >= cutoff);
+  }, [tripsData, tripId]);
   const [mode, setMode] = useState<(typeof MONEY_MODES)[number] | "">(editing?.mode && editing.mode !== "credit_card" ? editing.mode : "");
   const [tagsInput, setTagsInput] = useState(editing?.tags.join(", ") ?? "");
   const [more, setMore] = useState(Boolean(editing));
@@ -147,6 +160,8 @@ export function MoneyQuickAdd({
         mode: ccSpend ? "credit_card" : (mode || undefined),
         cardId: showCardPicker && cardId ? cardId : (editing?.cardId ? null : undefined),
         tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
+        // null (edit only) unlinks it from a trip it was on
+        tripId: type === "expense" && tripId ? tripId : editing?.tripId ? null : undefined,
       };
       const res = editing
         ? await fetch(`/api/money/tx/${editing.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
@@ -317,6 +332,34 @@ export function MoneyQuickAdd({
                 className="w-full"
                 style={{ borderRadius: 10, border: `1px solid ${subcategory.trim() ? "var(--line)" : "var(--red)"}`, padding: "9px 12px", fontSize: 13.5 }}
               />
+            </div>
+          )}
+
+          {type === "expense" && tripChoices.length > 0 && (
+            <div className="mb-4">
+              <p style={{ fontSize: 12.5, color: "var(--faint)", fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                Trip <span style={{ textTransform: "none", fontWeight: 400 }}>(optional)</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {tripChoices.map((t) => {
+                  const on = tripId === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setTripId(on ? null : t.id)}
+                      className="flex items-center gap-1.5"
+                      style={{
+                        padding: "6px 11px", borderRadius: 999, fontSize: 12.5,
+                        border: `1px solid ${on ? "var(--indigo)" : "var(--line)"}`,
+                        background: on ? "var(--indigo)" : "var(--card)",
+                        color: on ? "#fff" : "var(--ink)",
+                      }}
+                    >
+                      <Plane size={12} /> {t.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

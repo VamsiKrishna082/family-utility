@@ -105,6 +105,8 @@ export type MoneyTx = {
   source: "manual" | "recurring";
   /** Set when this entry was posted from a recurring template ("Post this month"). */
   recurringId?: string;
+  /** Set when this expense belongs to a trip — groups it on the trip's page across months; never changes Money's own totals. */
+  tripId?: string;
   /** Set when this saving was a contribution to a Goal — the goal's savedPaise moves with this entry's edits and deletion. */
   goalId?: string;
   createdBy: string; // email
@@ -359,22 +361,7 @@ export type NwDashboardResponse = {
   pendingAccounts: NwAccount[];
 };
 
-/* ------------------------------------------------------------------ */
-/* Trips                                                               */
-/* ------------------------------------------------------------------ */
-export const TRIP_STATUSES = ["planning", "upcoming", "past"] as const;
-
-export type Trip = {
-  id: string;
-  name: string;
-  destination: string;
-  startDate: string; // yyyy-mm-dd
-  endDate: string;
-  budget: number;
-  notes: string;
-  status: (typeof TRIP_STATUSES)[number];
-  createdAt: number;
-};
+/* Trips live in src/lib/trips/types.ts. */
 
 /* ------------------------------------------------------------------ */
 /* Documents — Drive holds the bytes, Firestore holds the metadata     */

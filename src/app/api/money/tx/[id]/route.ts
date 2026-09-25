@@ -16,6 +16,8 @@ const Body = z.object({
   categoryId: z.string().min(1).optional(),
   /** null clears it; omitted keeps the current one unless the category changed (a sub-category belongs to its category). */
   subcategory: z.string().max(60).nullable().optional(),
+  /** null unlinks it from its trip; omitted keeps whatever it had. */
+  tripId: z.string().min(1).max(60).nullable().optional(),
   note: z.string().max(300).optional(),
   mode: z.enum(MONEY_MODES).optional(),
   cardId: z.string().nullable().optional(),
@@ -73,6 +75,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         date: patch.date ?? oldTx.date,
         categoryId: newCategoryId,
         subcategory,
+        tripId: patch.tripId === null ? undefined : (patch.tripId ?? oldTx.tripId),
         note: patch.note ?? oldTx.note,
         mode: patch.mode ?? oldTx.mode,
         cardId: patch.cardId === null ? undefined : (patch.cardId ?? oldTx.cardId),
