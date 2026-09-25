@@ -1,7 +1,8 @@
 import { db } from "@/lib/firestore";
 import { computeDayTotals, dayStatus, todayIST } from "@/lib/fa/day";
-import { burnedKcal } from "@/lib/fa/targets";
-import type { FaActivity, FaDay, FaEntry, FaFood, FaProfile } from "@/lib/fa/types";
+import { burnedKcal, effectiveTarget, limitCheck } from "@/lib/fa/targets";
+import { BadRequest } from "@/lib/fa/auth";
+import type { FaActivity, FaDay, FaEntry, FaFood, FaLimit, FaProfile } from "@/lib/fa/types";
 
 /**
  * Collections (food.md "Data model"). All server-side via the Admin SDK, same
@@ -15,6 +16,7 @@ export const COL = {
   overrides: "food_overrides",
   favourites: "fa_favourites",
   weights: "fa_weights",
+  limits: "fa_limits",
 } as const;
 
 export const dayId = (person: string, date: string) => `${person}_${date}`;
@@ -48,6 +50,7 @@ export function buildDay(
   entries: FaEntry[],
   profile: FaProfile | null,
   activity?: { steps: number; workoutMin: number; activity?: FaActivity },
+  limit: FaLimit | null = null,
 ): FaDay {
   const base = prev ?? emptyDay(person, date);
   const totals = computeDayTotals(entries);
@@ -55,7 +58,7 @@ export function buildDay(
   const workoutMin = activity?.workoutMin ?? base.workoutMin;
   const act = activity ? activity.activity : base.activity;
   const burned = burnedKcal({ steps, workoutMin, activity: act, weightKg: profile?.weightKg ?? 70 });
-  const targetKcal = profile?.targetKcal ?? null;
+  const targetKcal = effectiveTarget(profile, limit).target;
   return {
     ...base,
     person,
@@ -90,13 +93,17 @@ export async function changeEntries(
   person: string,
   date: string,
   change: (current: FaEntry[]) => { upserts?: FaEntry[]; deletes?: string[] },
+  opts: { force?: boolean } = {},
 ): Promise<FaDay> {
   const entriesQ = db().collection(COL.entries).where("person", "==", person).where("date", "==", date);
   const dayRef = db().collection(COL.days).doc(dayId(person, date));
   const profileRef = db().collection(COL.profiles).doc(person);
+  const limitRef = db().collection(COL.limits).doc(person);
 
   return db().runTransaction(async (t) => {
-    const [entriesSnap, daySnap, profileSnap] = await Promise.all([t.get(entriesQ), t.get(dayRef), t.get(profileRef)]);
+    const [entriesSnap, daySnap, profileSnap, limitSnap] = await Promise.all([t.get(entriesQ), t.get(dayRef), t.get(profileRef), t.get(limitRef)]);
+    const profile = profileSnap.exists ? (profileSnap.data() as FaProfile) : null;
+    const limit = limitSnap.exists ? (limitSnap.data() as FaLimit) : null;
     const current = entriesSnap.docs.map((d) => d.data() as FaEntry);
     const { upserts = [], deletes = [] } = change(current);
 
@@ -104,13 +111,17 @@ export async function changeEntries(
     for (const id of deletes) byId.delete(id);
     for (const e of upserts) byId.set(e.id, e);
 
-    const day = buildDay(
-      daySnap.exists ? (daySnap.data() as FaDay) : null,
-      person,
-      date,
-      [...byId.values()],
-      profileSnap.exists ? (profileSnap.data() as FaProfile) : null,
-    );
+    const day = buildDay(daySnap.exists ? (daySnap.data() as FaDay) : null, person, date, [...byId.values()], profile, undefined, limit);
+
+    // Your own limit, in "block" mode: food that would take the day past it isn't logged.
+    const before = current.reduce((s, e) => s + e.kcal, 0);
+    if (!opts.force && limitCheck(before, day.eatenKcal, day.targetKcal, limit?.mode) === "block") {
+      const room = Math.max(0, (day.targetKcal ?? 0) - before);
+      throw new BadRequest(
+        `Not logged — that would take today to ${Math.round(day.eatenKcal).toLocaleString("en-IN")} kcal, over your ${Math.round(day.targetKcal!).toLocaleString("en-IN")} kcal limit. ${room ? `You have ${Math.round(room).toLocaleString("en-IN")} kcal left.` : "You've reached it for today."}`,
+        409,
+      );
+    }
 
     for (const id of deletes) t.delete(db().collection(COL.entries).doc(id));
     for (const e of upserts) t.set(db().collection(COL.entries).doc(e.id), e);
@@ -133,13 +144,20 @@ export function stripClientFields(food: FaFood): FaFood {
 }
 
 /** Re-judges today against the new target; past days keep the target they were logged against. */
-export async function refreshToday(person: string, profile: FaProfile) {
+export async function getLimit(person: string): Promise<FaLimit | null> {
+  const snap = await db().collection(COL.limits).doc(person).get();
+  return snap.exists ? (snap.data() as FaLimit) : null;
+}
+
+export async function refreshToday(person: string, profile: FaProfile | null) {
   const date = todayIST();
   const dayRef = db().collection(COL.days).doc(dayId(person, date));
   const entriesQ = db().collection(COL.entries).where("person", "==", person).where("date", "==", date);
+  const limitRef = db().collection(COL.limits).doc(person);
   await db().runTransaction(async (t) => {
-    const [daySnap, entriesSnap] = await Promise.all([t.get(dayRef), t.get(entriesQ)]);
+    const [daySnap, entriesSnap, limitSnap] = await Promise.all([t.get(dayRef), t.get(entriesQ), t.get(limitRef)]);
     if (!daySnap.exists && entriesSnap.empty) return;
-    t.set(dayRef, buildDay(daySnap.exists ? (daySnap.data() as FaDay) : null, person, date, entriesSnap.docs.map((d) => d.data() as FaEntry), profile));
+    const limit = limitSnap.exists ? (limitSnap.data() as FaLimit) : null;
+    t.set(dayRef, buildDay(daySnap.exists ? (daySnap.data() as FaDay) : null, person, date, entriesSnap.docs.map((d) => d.data() as FaEntry), profile, undefined, limit));
   });
 }

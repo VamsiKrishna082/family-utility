@@ -229,7 +229,14 @@ export function FoodActivity() {
 
       {/* ------------------------------ Sheets ----------------------------- */}
       {modal?.kind === "add" && (
-        <AddFoodSheet date={date} initialMeal={modal.meal} aiEnabled={data.aiEnabled} onClose={close} onAdded={refresh} />
+        <AddFoodSheet
+          date={date}
+          initialMeal={modal.meal}
+          aiEnabled={data.aiEnabled}
+          budget={{ target: me.targetKcal, eaten: me.day?.eatenKcal ?? 0, mode: me.limit?.mode }}
+          onClose={close}
+          onAdded={refresh}
+        />
       )}
       {modal?.kind === "entry" && <EntrySheet entry={modal.entry} onClose={close} onChanged={refresh} />}
       {modal?.kind === "movement" && (

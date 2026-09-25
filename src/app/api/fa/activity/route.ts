@@ -5,7 +5,7 @@ import { BadRequest, requirePerson } from "@/lib/fa/auth";
 import { personById } from "@/lib/fa/people";
 import { COL, buildDay, dayId } from "@/lib/fa/store";
 import { DateStr } from "@/lib/fa/schemas";
-import { FA_ACTIVITIES, type FaDay, type FaEntry, type FaProfile } from "@/lib/fa/types";
+import { FA_ACTIVITIES, type FaDay, type FaEntry, type FaLimit, type FaProfile } from "@/lib/fa/types";
 
 export const runtime = "nodejs";
 
@@ -33,9 +33,10 @@ export async function PUT(req: Request) {
     const dayRef = db().collection(COL.days).doc(dayId(person.id, body.date));
     const entriesQ = db().collection(COL.entries).where("person", "==", person.id).where("date", "==", body.date);
     const profileRef = db().collection(COL.profiles).doc(person.id);
+    const limitRef = db().collection(COL.limits).doc(person.id);
 
     const day = await db().runTransaction(async (t) => {
-      const [daySnap, entriesSnap, profileSnap] = await Promise.all([t.get(dayRef), t.get(entriesQ), t.get(profileRef)]);
+      const [daySnap, entriesSnap, profileSnap, limitSnap] = await Promise.all([t.get(dayRef), t.get(entriesQ), t.get(profileRef), t.get(limitRef)]);
       const next = buildDay(
         daySnap.exists ? (daySnap.data() as FaDay) : null,
         person.id,
@@ -43,6 +44,7 @@ export async function PUT(req: Request) {
         entriesSnap.docs.map((d) => d.data() as FaEntry),
         profileSnap.exists ? (profileSnap.data() as FaProfile) : null,
         { steps: body.steps, workoutMin: body.workoutMin, activity: body.activity },
+        limitSnap.exists ? (limitSnap.data() as FaLimit) : null,
       );
       t.set(dayRef, next);
       return next;

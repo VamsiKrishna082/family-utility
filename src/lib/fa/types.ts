@@ -121,12 +121,23 @@ export type FaProfile = {
 
 export type FaPerson = { id: string; name: string };
 
+/**
+ * A daily calorie limit you set yourself (works without a full profile).
+ * "block": food that would take the day past it isn't logged; "warn": it is,
+ * with a note. With a profile, a limit under BMR is raised to BMR (floor rule).
+ */
+export type FaLimit = { kcal: number; mode: "block" | "warn"; updatedAt: number };
+
 export type FaStripDay = { date: string; status: FaStatus };
 
 export type FaPersonDay = {
   person: FaPerson;
   isYou: boolean;
   profile: FaProfile | null;
+  /** Your own daily limit, if set. */
+  limit: FaLimit | null;
+  /** The day's effective target: the limit (floored at BMR when there's a profile), else the profile's computed target. */
+  targetKcal: number | null;
   day: FaDay | null;
   entries: FaEntry[];
   strip14: FaStripDay[];

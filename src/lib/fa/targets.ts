@@ -1,4 +1,4 @@
-import type { FaActivity, FaSex } from "@/lib/fa/types";
+import type { FaActivity, FaLimit, FaSex } from "@/lib/fa/types";
 
 /** Mifflin-St Jeor resting energy. */
 export function bmr({ weightKg, heightCm, age, sex }: { weightKg: number; heightCm: number; age: number; sex: FaSex }): number {
@@ -90,4 +90,27 @@ export function burnedKcal({ steps, workoutMin, activity, weightKg }: { steps: n
   const met = ACTIVITY_MET[activity ?? "other"];
   const fromWorkout = (met - 1) * weightKg * (workoutMin / 60);
   return Math.round(fromSteps + fromWorkout);
+}
+
+/**
+ * The day's target: your own limit when you've set one — raised to your BMR
+ * if you have a profile and set it lower (the floor rule) — otherwise the
+ * profile's computed target, otherwise none.
+ */
+export function effectiveTarget(profile: { targetKcal: number; bmrKcal: number } | null, limit: Pick<FaLimit, "kcal"> | null): { target: number | null; floored: boolean } {
+  if (limit?.kcal) {
+    if (profile && limit.kcal < profile.bmrKcal) return { target: profile.bmrKcal, floored: true };
+    return { target: limit.kcal, floored: false };
+  }
+  return { target: profile?.targetKcal ?? null, floored: false };
+}
+
+/**
+ * Would this change break the limit? Only a change that raises the day's
+ * total past the target counts — removing food or shrinking a portion is
+ * always allowed, even on a day that's already over.
+ */
+export function limitCheck(before: number, after: number, target: number | null, mode: FaLimit["mode"] | undefined): "ok" | "warn" | "block" {
+  if (!target || !mode || after <= target || after <= before) return "ok";
+  return mode === "block" ? "block" : "warn";
 }

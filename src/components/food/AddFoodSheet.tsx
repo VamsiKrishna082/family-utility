@@ -56,11 +56,13 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 export function AddFoodSheet({
-  date, initialMeal, aiEnabled, onClose, onAdded,
+  date, initialMeal, aiEnabled, onClose, onAdded, budget,
 }: {
   date: string;
   initialMeal: FaMeal;
   aiEnabled: boolean;
+  /** Today's target, what's eaten so far, and your limit's mode — for "X kcal left" and blocking over-limit adds. */
+  budget?: { target: number | null; eaten: number; mode?: "block" | "warn" };
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -110,6 +112,8 @@ export function AddFoodSheet({
   const totalGrams = custom
     ? (customPer100 && gramsN > 0 ? gramsN : undefined)
     : gpb && serving ? Math.round(serving.mult * gpb * qty) : undefined;
+  const left = budget?.target ? budget.target - budget.eaten : null;
+  const overLimit: "ok" | "warn" | "block" = left !== null && total && total.kcal > left && total.kcal > 0 ? (budget?.mode === "block" ? "block" : budget?.mode === "warn" ? "warn" : "ok") : "ok";
   const gramsInvalid = (byGrams || (custom && customPer100)) && !(gramsN > 0);
 
   const select = (food: FaFood) => {
@@ -308,7 +312,14 @@ export function AddFoodSheet({
           <button onClick={onClose} aria-label="Back" className="flex items-center justify-center" style={{ width: 44, height: 44, borderRadius: 12, border: "1px solid var(--fa-line)", background: "#fff", flexShrink: 0 }}>
             <ChevronLeft size={20} />
           </button>
-          <h1 className="fa-serif" style={{ margin: 0, fontSize: 24 }}>Add to {FA_MEAL_LABEL[meal].toLowerCase()}</h1>
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            <h1 className="fa-serif" style={{ margin: 0, fontSize: 24 }}>Add to {FA_MEAL_LABEL[meal].toLowerCase()}</h1>
+            {left !== null && (
+              <span style={{ fontSize: 12.5, color: left <= 0 ? "#b44b44" : "var(--fa-dim)", fontWeight: 600 }}>
+                {left > 0 ? `${fmt(left)} kcal left of ${fmt(budget!.target!)}` : `Limit of ${fmt(budget!.target!)} kcal reached`}
+              </span>
+            )}
+          </div>
         </header>
 
         <div className="flex overflow-x-auto" style={{ gap: 8, margin: "0 -16px", padding: "0 16px" }}>
@@ -557,10 +568,10 @@ export function AddFoodSheet({
               <button
                 className="fa-btn fa-btn-primary flex-1"
                 style={{ height: 52, fontSize: 15 }}
-                disabled={!!busy || !total || gramsInvalid || (custom && !customName.trim())}
+                disabled={!!busy || !total || gramsInvalid || (custom && !customName.trim()) || overLimit === "block"}
                 onClick={selected ? add : addCustom}
               >
-                {busy === "add" ? "Adding…" : `Add ${fmt(total?.kcal ?? 0)} kcal`}
+                {busy === "add" ? "Adding…" : overLimit === "block" ? "Over your limit" : `Add ${fmt(total?.kcal ?? 0)} kcal`}
               </button>
               {selected && (
                 <button
@@ -574,6 +585,13 @@ export function AddFoodSheet({
                 </button>
               )}
             </div>
+            {overLimit !== "ok" && left !== null && (
+              <p style={{ margin: 0, fontSize: 12.5, color: overLimit === "block" ? "#b44b44" : "var(--fa-dim)", fontWeight: 600 }}>
+                {overLimit === "block"
+                  ? `That's ${fmt((total?.kcal ?? 0) - Math.max(0, left))} kcal more than you have left (${fmt(Math.max(0, left))} of ${fmt(budget!.target!)}). Try a smaller serving — your limit stops it being logged.`
+                  : `Heads up: this takes you ${fmt((total?.kcal ?? 0) - Math.max(0, left))} kcal over your ${fmt(budget!.target!)} kcal limit.`}
+              </p>
+            )}
           </section>
         )}
       </div>

@@ -90,6 +90,8 @@ export function SetupSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay; da
           <span style={{ fontSize: 13, color: "var(--fa-dim)" }}>Only you can change these. Both of you can see each other&apos;s day.</span>
         </div>
 
+        <LimitCard pd={pd} onSaved={onSaved} />
+
         {p && (
           <div className="fa-card flex flex-col" style={{ padding: 14, gap: 8 }}>
             <span className="fa-label">Log today&apos;s weight</span>
@@ -160,5 +162,61 @@ export function SetupSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay; da
         </button>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Your own daily calorie limit — no profile needed. "Don't let me log past
+ * it" stops food that would take the day over; "Just warn me" logs it with
+ * a note. With a profile, a limit under your BMR is raised to BMR.
+ */
+function LimitCard({ pd, onSaved }: { pd: FaPersonDay; onSaved: () => void }) {
+  const [kcal, setKcal] = useState(pd.limit ? String(pd.limit.kcal) : "");
+  const [mode, setMode] = useState<"block" | "warn">(pd.limit?.mode ?? "block");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const n = Number(kcal);
+  const valid = n >= 800 && n <= 6000;
+  const floored = valid && pd.profile && n < pd.profile.bmrKcal;
+
+  const save = async (value: number | null) => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await send<{ target: number | null; floored: boolean }>("/api/fa/limit", "PUT", { kcal: value, mode });
+      setMsg(value === null ? "Limit removed." : res.floored ? `Saved — your target is ${fmt(res.target ?? 0)} kcal (your BMR floor).` : `Saved — ${fmt(value)} kcal a day.`);
+      if (value === null) setKcal("");
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fa-card flex flex-col" style={{ padding: 14, gap: 10 }}>
+      <span className="fa-label">Daily calorie limit</span>
+      <div className="flex" style={{ gap: 8 }}>
+        <input className="fa-input flex-1" inputMode="numeric" placeholder="e.g. 1800" value={kcal} onChange={(e) => setKcal(e.target.value.replace(/\D/g, ""))} aria-label="Daily calorie limit" />
+        <span className="flex items-center" style={{ fontSize: 13, color: "var(--fa-dim)" }}>kcal</span>
+      </div>
+      <div className="flex flex-wrap" style={{ gap: 8 }}>
+        <button className="fa-chip" aria-pressed={mode === "block"} onClick={() => setMode("block")}>Don&apos;t let me log past it</button>
+        <button className="fa-chip" aria-pressed={mode === "warn"} onClick={() => setMode("warn")}>Just warn me</button>
+      </div>
+      {floored && (
+        <span style={{ fontSize: 12.5, color: "var(--fa-dim)" }}>
+          That&apos;s below your BMR ({fmt(pd.profile!.bmrKcal)} kcal), so {fmt(pd.profile!.bmrKcal)} will be used. Eating much less than this is something to plan with a doctor or dietitian.
+        </span>
+      )}
+      <div className="flex" style={{ gap: 8 }}>
+        <button className="fa-btn fa-btn-dark flex-1" disabled={busy || !valid} onClick={() => save(n)}>{busy ? "Saving…" : pd.limit ? "Update limit" : "Set limit"}</button>
+        {pd.limit && <button className="fa-btn" disabled={busy} onClick={() => save(null)}>Remove</button>}
+      </div>
+      <span style={{ fontSize: 12, color: "var(--fa-dim)" }}>
+        {msg || (pd.profile ? "Overrides the target worked out from your profile." : "Works on its own — no need to fill in the profile below.")}
+      </span>
+    </div>
   );
 }

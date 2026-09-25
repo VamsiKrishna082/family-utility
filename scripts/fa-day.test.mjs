@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeDayTotals, dayStatus, loggingStreak, scaleNutrition, shiftDate } from "../src/lib/fa/day.ts";
-import { burnedKcal, computeTargets } from "../src/lib/fa/targets.ts";
+import { burnedKcal, computeTargets, effectiveTarget, limitCheck } from "../src/lib/fa/targets.ts";
 
 const entry = (kcal, protein = 0, carbs = 0, fat = 0, fibre = 0) => ({ kcal, protein, carbs, fat, fibre });
 
@@ -71,4 +71,15 @@ test("logging by grams scales from the food's weight per unit", () => {
   const g100 = scaleNutrition(idli, 100 / 40);
   assert.equal(g100.kcal, 145);
   assert.equal(scaleNutrition(g100, 150 / 100).kcal, 218);
+});
+
+test("your own limit: floored at BMR only with a profile; blocks only increases past it", () => {
+  assert.deepEqual(effectiveTarget(null, { kcal: 1500 }), { target: 1500, floored: false });
+  assert.deepEqual(effectiveTarget({ targetKcal: 1900, bmrKcal: 1400 }, { kcal: 1200 }), { target: 1400, floored: true });
+  assert.deepEqual(effectiveTarget({ targetKcal: 1900, bmrKcal: 1400 }, null), { target: 1900, floored: false });
+  assert.equal(limitCheck(1800, 2100, 2000, "block"), "block");
+  assert.equal(limitCheck(1800, 2100, 2000, "warn"), "warn");
+  assert.equal(limitCheck(1800, 1950, 2000, "block"), "ok");
+  assert.equal(limitCheck(2300, 2100, 2000, "block"), "ok"); // removing food on an over day is always fine
+  assert.equal(limitCheck(1800, 2100, null, "block"), "ok");
 });

@@ -35,7 +35,7 @@ export function Hero({ pd, isToday, title, wide, onSetup }: { pd: FaPersonDay; i
   const day = pd.day;
   const eaten = day?.eatenKcal ?? 0;
   const burned = day?.burnedKcal ?? 0;
-  const target = pd.profile?.targetKcal ?? null;
+  const target = pd.targetKcal;
   const left = target !== null ? target - (eaten - burned) : null;
   const pct = target ? Math.max(0, Math.min(100, ((eaten - burned) / target) * 100)) : 0;
   const status: FaStatus = day?.status ?? "none";

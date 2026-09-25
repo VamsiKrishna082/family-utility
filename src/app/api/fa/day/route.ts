@@ -2,7 +2,8 @@ import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
 import { requirePerson } from "@/lib/fa/auth";
 import { FA_PEOPLE } from "@/lib/fa/people";
-import { COL, getProfile } from "@/lib/fa/store";
+import { COL, getLimit, getProfile } from "@/lib/fa/store";
+import { effectiveTarget } from "@/lib/fa/targets";
 import { dateRange, loggingStreak, strip, todayIST } from "@/lib/fa/day";
 import type { FaDay, FaDayResponse, FaEntry, FaMeal, FaPersonDay, FaStatus } from "@/lib/fa/types";
 import { FA_MEALS } from "@/lib/fa/types";
@@ -28,8 +29,9 @@ export async function GET(req: Request) {
     const loggedByPerson = new Map<string, Set<string>>();
     const people: FaPersonDay[] = await Promise.all(
       FA_PEOPLE.map(async (person) => {
-        const [profile, entriesSnap, daysSnap, weightsSnap] = await Promise.all([
+        const [profile, limit, entriesSnap, daysSnap, weightsSnap] = await Promise.all([
           getProfile(person.id),
+          getLimit(person.id),
           db().collection(COL.entries).where("person", "==", person.id).where("date", "==", date).get(),
           db().collection(COL.days).where("person", "==", person.id).get(),
           db().collection(COL.weights).where("person", "==", person.id).get(),
@@ -65,6 +67,8 @@ export async function GET(req: Request) {
           person,
           isYou: person.id === me.id,
           profile,
+          limit,
+          targetKcal: effectiveTarget(profile, limit).target,
           day: byDate.get(date) ?? null,
           entries,
           strip14: strip(statusByDate, date, 14),
