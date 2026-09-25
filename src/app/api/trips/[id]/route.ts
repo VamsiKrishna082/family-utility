@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
 import { dayHasContent, endDateOf } from "@/lib/trips/logic";
-import { daysCol, emptyDay, getTrip, HttpError, TripFields, tripsCol } from "@/lib/trips/store";
+import { daysCol, emptyDay, getTrip, HttpError, readDay, TripFields, tripsCol } from "@/lib/trips/store";
 import type { TripDay } from "@/lib/trips/types";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     await requireUser();
     const { id } = await ctx.params;
     const [trip, daysSnap] = await Promise.all([getTrip(id), daysCol(id).get()]);
-    const byNum = new Map(daysSnap.docs.map((d) => [(d.data() as TripDay).day, d.data() as TripDay]));
+    const byNum = new Map(daysSnap.docs.map((d) => readDay(d.data())).map((d) => [d.day, d]));
     const days = Array.from({ length: trip.days }, (_, i) => byNum.get(i + 1) ?? emptyDay(id, i + 1));
     // Days beyond the current length that still hold writing/photos (the trip was shortened with "keep").
     const hidden = [...byNum.values()].filter((d) => d.day > trip.days && dayHasContent(d)).map((d) => d.day);
@@ -45,7 +45,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const days = patch.days ?? trip.days;
     if (days < trip.days && !confirmDropDays) {
       const snap = await daysCol(id).where("day", ">", days).get();
-      const withContent = snap.docs.map((d) => d.data() as TripDay).filter(dayHasContent).map((d) => d.day).sort((a, b) => a - b);
+      const withContent = snap.docs.map((d) => readDay(d.data())).filter(dayHasContent).map((d) => d.day).sort((a, b) => a - b);
       if (withContent.length) {
         throw new HttpError(`Day ${withContent.join(", ")} ${withContent.length === 1 ? "has" : "have"} writing or photos`, 409, { days: withContent });
       }

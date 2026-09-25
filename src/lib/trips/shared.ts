@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/firestore";
 import { listFolder } from "@/lib/drive";
-import { daysCol, normalizeTrip } from "@/lib/trips/store";
+import { daysCol, normalizeTrip, readDay } from "@/lib/trips/store";
 import type { Trip, TripDay } from "@/lib/trips/types";
 import type { Entry } from "@/lib/types";
 
@@ -19,7 +19,7 @@ export async function tripByShareToken(token: string): Promise<Trip | null> {
 
 export async function sharedDays(trip: Trip): Promise<TripDay[]> {
   const snap = await daysCol(trip.id).get();
-  return snap.docs.map((d) => d.data() as TripDay).filter((d) => d.day <= trip.days).sort((a, b) => a.day - b.day);
+  return snap.docs.map((d) => readDay(d.data())).filter((d) => d.day <= trip.days).sort((a, b) => a.day - b.day);
 }
 
 /** Photos (not videos, not folders) in a day's linked Album folder, oldest first like a camera roll. */

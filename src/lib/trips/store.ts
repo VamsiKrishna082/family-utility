@@ -39,6 +39,16 @@ export function emptyDay(tripId: string, day: number): TripDay {
   return { tripId, day, title: "", story: "", places: [], highlight: "", updatedAt: 0, updatedBy: "" };
 }
 
+/**
+ * A day doc with every field present. Linking a photo folder (or "Create
+ * Album folders") writes only the folder fields, so a day that was never
+ * written has no title/story/places yet — always read days through here.
+ */
+export function readDay(data: FirebaseFirestore.DocumentData): TripDay {
+  const d = data as Partial<TripDay> & { tripId: string; day: number };
+  return { ...emptyDay(d.tripId, d.day), ...d, places: d.places ?? [], title: d.title ?? "", story: d.story ?? "", highlight: d.highlight ?? "" };
+}
+
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const Id = z.string().min(1).max(40);
 const Rupees = z.number().min(0).max(100_000_000);

@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { ok, fail } from "@/lib/http";
 import { geocodeCity, geocodePlace, sleep } from "@/lib/trips/geo";
-import { daysCol, getTrip, tripsCol } from "@/lib/trips/store";
+import { daysCol, getTrip, readDay, tripsCol } from "@/lib/trips/store";
 import type { GeoPoint, TripDay } from "@/lib/trips/types";
 
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const daysSnap = await daysCol(id).get();
-    const days = daysSnap.docs.map((d) => d.data() as TripDay).filter((d) => d.day <= trip.days);
+    const days: TripDay[] = daysSnap.docs.map((d) => readDay(d.data())).filter((d) => d.day <= trip.days);
     let lookups = 0;
     let pending = 0;
     const points: (GeoPoint & { day: number })[] = [];
