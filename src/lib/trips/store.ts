@@ -31,6 +31,10 @@ export function normalizeTrip(t: Trip): Trip {
     links: t.links ?? [],
     todos: t.todos ?? [],
     shared: t.shared ?? [],
+    settlements: t.settlements ?? [],
+    upi: t.upi ?? {},
+    cash: t.cash ?? [],
+    receipts: t.receipts ?? [],
     notes: t.notes ?? "",
   };
 }
@@ -77,12 +81,13 @@ export const TripFields = z.object({
     id: Id, day: z.number().int().min(1).max(90).optional(), time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     title: z.string().trim().min(1).max(160), place: z.string().trim().max(120).optional(), link: Url.optional(),
     notes: z.string().max(1000).optional(), estimateRupees: Rupees.optional(), status: z.enum(PLAN_STATUSES),
+    durationMin: z.number().int().min(5).max(24 * 60).optional(), votes: z.array(z.string().max(40)).max(10).optional(),
   })).max(300).default([]),
   stays: z.array(z.object({
     id: Id, name: z.string().trim().min(1).max(120), link: Url.optional(), area: z.string().trim().max(80).optional(),
     pricePerNightRupees: Rupees.optional(), nights: z.number().int().min(1).max(90).optional(),
     rating: z.number().int().min(1).max(5).optional(), pros: z.string().max(500).optional(), cons: z.string().max(500).optional(),
-    status: z.enum(STAY_STATUSES),
+    status: z.enum(STAY_STATUSES), votes: z.array(z.string().max(40)).max(10).optional(),
   })).max(60).default([]),
   links: z.array(z.object({ id: Id, title: z.string().trim().min(1).max(160), url: Url.min(1), note: z.string().max(500).optional() })).max(200).default([]),
   todos: z.array(z.object({ id: Id, text: z.string().trim().min(1).max(160), due: DateStr.optional(), done: z.boolean() })).max(200).default([]),
@@ -90,20 +95,28 @@ export const TripFields = z.object({
     id: Id, date: DateStr.optional(), title: z.string().trim().min(1).max(120), amount: z.number().min(0).max(100_000_000),
     paidBy: z.string().trim().min(1).max(40), splitAmong: z.array(z.string().trim().min(1).max(40)).max(20),
   })).max(500).default([]),
+  settlements: z.array(z.object({
+    id: Id, from: z.string().trim().min(1).max(40), to: z.string().trim().min(1).max(40), amount: z.number().positive().max(100_000_000), date: DateStr,
+  })).max(500).default([]),
+  upi: z.record(z.string().max(40), z.string().trim().max(80).regex(/^[\w.\-]{2,}@[\w.\-]{2,}$/)).default({}),
+  cash: z.array(z.object({
+    id: Id, date: DateStr, kind: z.enum(["in", "out"]), amount: z.number().positive().max(100_000_000),
+    currency: z.string().trim().min(1).max(8), inrCost: Rupees.optional(), note: z.string().max(200).optional(),
+  })).max(1000).default([]),
 });
 
-/** Money transactions linked to a trip, with their category names — for the trip's Expenses tab. */
-export async function tripExpenses(tripId: string): Promise<TripExpense[]> {
+/** Money transactions linked to a trip, with their category names: expenses, and income entries as refunds. */
+export async function tripExpenses(tripId: string): Promise<{ items: TripExpense[]; refunds: TripExpense[] }> {
   const [txSnap, catSnap] = await Promise.all([
     db().collection("money_tx").where("tripId", "==", tripId).get(),
     db().collection("money_categories").get(),
   ]);
   const cats = new Map(catSnap.docs.map((d) => [d.id, d.data() as MoneyCategory]));
-  return txSnap.docs
-    .map((d) => d.data() as MoneyTx)
-    .filter((t) => t.type === "expense")
-    .map((t) => toTripExpense(t, cats))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const all = txSnap.docs.map((d) => d.data() as MoneyTx).sort((a, b) => a.date.localeCompare(b.date));
+  return {
+    items: all.filter((t) => t.type === "expense").map((t) => toTripExpense(t, cats)),
+    refunds: all.filter((t) => t.type === "income").map((t) => toTripExpense(t, cats)),
+  };
 }
 
 export function toTripExpense(t: MoneyTx, cats: Map<string, MoneyCategory>): TripExpense {

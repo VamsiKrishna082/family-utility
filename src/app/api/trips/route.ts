@@ -19,9 +19,10 @@ export async function GET() {
     const spent = new Map<string, { paise: number; count: number }>();
     for (const d of txSnap.docs) {
       const t = d.data() as MoneyTx;
-      if (!t.tripId || t.type !== "expense") continue;
+      if (!t.tripId || (t.type !== "expense" && t.type !== "income")) continue;
+      // Net cost: expenses minus refunds (income linked to the trip).
       const cur = spent.get(t.tripId) ?? { paise: 0, count: 0 };
-      spent.set(t.tripId, { paise: cur.paise + t.amountPaise, count: cur.count + 1 });
+      spent.set(t.tripId, t.type === "expense" ? { paise: cur.paise + t.amountPaise, count: cur.count + 1 } : { ...cur, paise: cur.paise - t.amountPaise });
     }
     const items: TripSummary[] = tripsSnap.docs
       .map((d) => normalizeTrip(d.data() as Trip))
@@ -59,6 +60,10 @@ export async function POST(req: Request) {
       stays: body.stays,
       links: body.links,
       shared: body.shared,
+      settlements: body.settlements,
+      upi: body.upi,
+      cash: body.cash,
+      receipts: [],
       createdBy: user.email,
       createdAt: now,
       updatedAt: now,

@@ -1,6 +1,7 @@
 import { FieldValue } from "@google-cloud/firestore";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { personForEmail } from "@/lib/fa/people";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
 import { dayHasContent, endDateOf } from "@/lib/trips/logic";
@@ -12,14 +13,15 @@ export const runtime = "nodejs";
 /** GET — the trip plus every day of its journal (missing days come back empty). */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireUser();
+    const user = await requireUser();
     const { id } = await ctx.params;
     const [trip, daysSnap] = await Promise.all([getTrip(id), daysCol(id).get()]);
     const byNum = new Map(daysSnap.docs.map((d) => readDay(d.data())).map((d) => [d.day, d]));
     const days = Array.from({ length: trip.days }, (_, i) => byNum.get(i + 1) ?? emptyDay(id, i + 1));
     // Days beyond the current length that still hold writing/photos (the trip was shortened with "keep").
     const hidden = [...byNum.values()].filter((d) => d.day > trip.days && dayHasContent(d)).map((d) => d.day);
-    return ok({ trip, days, hiddenDays: hidden });
+    // "me" lets the page mark your own 👍 votes (same person mapping as Food & activity).
+    return ok({ trip, days, hiddenDays: hidden, me: personForEmail(user.email) });
   } catch (e) {
     return fail(e);
   }

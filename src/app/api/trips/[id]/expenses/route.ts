@@ -13,7 +13,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     await requireUser();
     const { id } = await ctx.params;
     await getTrip(id);
-    return ok({ items: await tripExpenses(id) });
+    return ok(await tripExpenses(id));
   } catch (e) {
     return fail(e);
   }

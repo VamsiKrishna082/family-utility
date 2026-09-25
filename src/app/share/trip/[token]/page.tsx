@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MapPin, Star } from "lucide-react";
-import { dateOfDay, dayLabel, rangeLabel } from "@/lib/trips/logic";
+import { MapPin, Star, Utensils } from "lucide-react";
+import { dateOfDay, dayLabel, rangeLabel, wrapUp } from "@/lib/trips/logic";
 import { dayPhotos, sharedDays, tripByShareToken } from "@/lib/trips/shared";
 import { PrintButton } from "@/components/trips/PrintButton";
 
@@ -18,7 +18,13 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
   const trip = await tripByShareToken(token);
   if (!trip) notFound();
   const days = await sharedDays(trip);
-  const withPhotos = await Promise.all(days.map(async (d) => ({ day: d, photos: await dayPhotos(d) })));
+  // Each day's ♥ favourites first, then the rest in the order they were taken.
+  const withPhotos = await Promise.all(days.map(async (d) => {
+    const all = await dayPhotos(d);
+    const favs = (d.favourites ?? []).map((id) => all.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
+    return { day: d, photos: [...favs, ...all.filter((p) => !d.favourites?.includes(p.id))] };
+  }));
+  const wrap = wrapUp(days, Object.fromEntries(withPhotos.map((w) => [w.day.day, w.photos.length])));
   const cover = trip.coverPhotoId ?? withPhotos.find((w) => w.photos.length)?.photos[0]?.id;
   const photo = (id: string, w = 520) => `/share/trip/${token}/photo/${id}?w=${w}`;
 
@@ -46,12 +52,19 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
         <PrintButton />
       </div>
 
+      {wrap.daysWritten > 0 && (
+        <p style={{ fontSize: 14, color: "var(--dim)", marginTop: 14 }}>
+          {[`${wrap.days} days`, wrap.places ? `${wrap.places} places` : "", wrap.photos ? `${wrap.photos} photos` : "", wrap.foodSpots ? `${wrap.foodSpots} food spots` : "", wrap.bestDay ? `best day: Day ${wrap.bestDay}` : ""].filter(Boolean).join(" · ")}
+          {wrap.moods.length > 0 && <span style={{ marginLeft: 8, letterSpacing: 2 }}>{wrap.moods.join("")}</span>}
+        </p>
+      )}
       {withPhotos.length === 0 && <p style={{ color: "var(--faint)", marginTop: 30 }}>The journal for this trip hasn&apos;t been written yet.</p>}
 
       {withPhotos.map(({ day, photos }) => (
         <section key={day.day} className="share-day" style={{ marginTop: 36, paddingTop: 24, borderTop: "1px solid var(--line)" }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--faint)" }}>
             Day {day.day}{trip.startDate ? ` · ${dayLabel(dateOfDay(trip.startDate, day.day))}` : ""}
+            {day.mood ? ` · ${day.mood}` : ""}{day.rating ? ` · ${"★".repeat(day.rating)}` : ""}
           </p>
           {day.title && <h2 className="display" style={{ fontSize: 26, marginTop: 4 }}>{day.title}</h2>}
           {day.places.length > 0 && (
@@ -63,6 +76,11 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
           {day.highlight && (
             <p className="flex items-start" style={{ gap: 8, marginTop: 12, padding: "10px 14px", borderRadius: 12, background: "var(--line2)", fontSize: 14.5 }}>
               <Star size={15} style={{ marginTop: 3, flexShrink: 0 }} /> {day.highlight}
+            </p>
+          )}
+          {(day.food ?? []).length > 0 && (
+            <p className="flex flex-wrap items-center" style={{ gap: 6, fontSize: 13.5, color: "var(--dim)", marginTop: 10 }}>
+              <Utensils size={14} /> {(day.food ?? []).map((f) => `${f.name}${f.dish ? ` (${f.dish})` : ""}`).join(" · ")}
             </p>
           )}
           {photos.length > 0 && (

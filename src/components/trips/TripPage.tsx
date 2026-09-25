@@ -79,9 +79,9 @@ export function TripPage({ id }: { id: string }) {
         ))}
       </div>
 
-      {active === "plan" && <PlanTab trip={trip} saveTrip={saveTrip} />}
+      {active === "plan" && <PlanTab trip={trip} saveTrip={saveTrip} me={data.me} onChanged={() => mutate()} />}
       {active === "journey" && <JourneyTab trip={trip} days={days} hiddenDays={hiddenDays} onChanged={() => mutate()} saveTrip={saveTrip} />}
-      {active === "expenses" && <ExpensesTab trip={trip} saveTrip={saveTrip} />}
+      {active === "expenses" && <ExpensesTab trip={trip} saveTrip={saveTrip} onTripChanged={() => mutate()} />}
 
       <div className="flex justify-end mt-8">
         <button className="flex items-center gap-1.5" style={{ fontSize: 13, color: "var(--faint)" }} onClick={() => setDeleting(true)}><Trash2 size={14} /> Delete trip</button>

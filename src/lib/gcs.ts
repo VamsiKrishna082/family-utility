@@ -25,3 +25,8 @@ export async function gcsDownload(key: string): Promise<Buffer> {
   const [data] = await bucket().file(key).download();
   return data;
 }
+
+/** Deletes an object; a missing one is not an error. */
+export async function gcsDelete(key: string): Promise<void> {
+  await bucket().file(key).delete({ ignoreNotFound: true });
+}

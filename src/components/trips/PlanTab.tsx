@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { Check, CheckCircle2, Circle, CloudRain, CloudSun, ExternalLink, Link2, MapPin, Plus, RotateCcw, Snowflake, Star, Sun, CloudLightning, CloudFog } from "lucide-react";
-import { dateOfDay, dayLabel, mapsLink, safeUrl, todayIST } from "@/lib/trips/logic";
+import { AlertTriangle, CalendarClock, Check, CheckCircle2, Circle, CloudRain, CloudSun, Copy, ExternalLink, Link2, MapPin, Navigation, Plus, RotateCcw, Snowflake, Star, Sun, ThumbsUp, CloudLightning, CloudFog } from "lucide-react";
+import { dateOfDay, dayLabel, directionsLink, gapAfter, mapsLink, safeUrl, timelineClashes, todayIST } from "@/lib/trips/logic";
+import { FA_PEOPLE } from "@/lib/fa/people";
+import { CopyFromTrip } from "@/components/trips/CopyFromTrip";
 import {
   BUDGET_KEYS, BUDGET_LABEL, PLAN_STATUSES, TRIP_BOOKING_KINDS, TRIP_BOOKING_LABEL,
-  type BudgetKey, type PlanItem, type PlanStatus, type StayOption, type StayStatus, type Trip, type TripBooking, type TripLink, type TripTodo, type TripWeatherResponse,
+  type BudgetKey, type DocCheckItem, type PlanItem, type PlanStatus, type StayOption, type StayStatus, type Trip, type TripBooking, type TripLink, type TripTodo, type TripWeatherResponse,
 } from "@/lib/trips/types";
 import { FieldForm, num, str, type Field } from "@/components/trips/FieldForm";
 import { fetcher, rupees, Section, smallBtn, uid } from "@/components/trips/shared";
@@ -51,9 +53,15 @@ function ExtLink({ href, children }: { href?: string; children: React.ReactNode 
  * itinerary by day, where to stay, bookings, to-dos, saved links, budget
  * plan and packing. Every list saves straight into the trip.
  */
-export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Partial<Trip>) => Promise<void> }) {
+export function PlanTab({ trip, saveTrip, me, onChanged }: { trip: Trip; saveTrip: (patch: Partial<Trip>) => Promise<void>; me: { id: string; name: string }; onChanged: () => void }) {
   const today = todayIST();
   const { data: weather } = useSWR<TripWeatherResponse>(trip.destination ? `/api/trips/${trip.id}/weather` : null, fetcher);
+  const { data: docs } = useSWR<{ items: DocCheckItem[]; checked: number }>(trip.endDate ? `/api/trips/${trip.id}/docs` : null, fetcher);
+  const [copying, setCopying] = useState(false);
+  const nameOf = (pid: string) => FA_PEOPLE.find((x) => x.id === pid)?.name ?? pid;
+  const toggleVote = <T extends { id: string; votes?: string[] }>(list: T[], id: string): T[] =>
+    list.map((x) => (x.id === id ? { ...x, votes: x.votes?.includes(me.id) ? x.votes.filter((v) => v !== me.id) : [...(x.votes ?? []), me.id] } : x));
+  const votesOf = (x: { votes?: string[] }) => x.votes?.length ?? 0;
   const [form, setForm] = useState<null | { kind: "plan" | "stay" | "booking" | "link" | "todo"; id?: string; day?: number }>(null);
   const [packText, setPackText] = useState("");
 
@@ -67,6 +75,7 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
     { key: "title", label: "What", type: "text", required: true, placeholder: "e.g. Sunset at Chapora Fort" },
     { key: "day", label: "Day", type: "select", options: dayOpts },
     { key: "time", label: "Time", type: "time" },
+    { key: "durationMin", label: "How long", type: "select", options: [30, 60, 90, 120, 180, 240, 360, 480].map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : `${m / 60} h` })) },
     { key: "place", label: "Place", type: "text", placeholder: "Used for the Maps link" },
     { key: "link", label: "Link", type: "url", placeholder: "Blog, reel, booking page…" },
     { key: "estimateRupees", label: "Estimated cost (₹)", type: "number" },
@@ -75,27 +84,51 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
   ];
   const toPlan = (v: Record<string, string>, id: string): PlanItem => ({
     id, title: v.title, day: num(v.day), time: str(v.time), place: str(v.place), link: str(v.link),
-    estimateRupees: num(v.estimateRupees), status: (v.status as PlanStatus) ?? "idea", notes: str(v.notes),
+    estimateRupees: num(v.estimateRupees), status: (v.status as PlanStatus) ?? "idea", notes: str(v.notes), durationMin: num(v.durationMin),
+    votes: trip.plan.find((x) => x.id === id)?.votes,
   });
   const byTime = (a: PlanItem, b: PlanItem) => (a.time ?? "99").localeCompare(b.time ?? "99") || a.title.localeCompare(b.title);
   const unscheduled = trip.plan.filter((p) => !p.day || p.day > trip.days);
   const planEstimate = trip.plan.reduce((s, p) => s + (p.estimateRupees ?? 0), 0);
 
-  const PlanRow = ({ p }: { p: PlanItem }) => (
+  const VoteButton = ({ votes, onClick }: { votes?: string[]; onClick: () => void }) => {
+    const mine = votes?.includes(me.id);
+    return (
+      <button
+        onClick={onClick}
+        title={votes?.length ? `Liked by ${votes.map(nameOf).join(" & ")}` : "Like this"}
+        className="flex items-center"
+        style={{ gap: 3, fontSize: 12, fontWeight: 700, color: mine ? "#2f6e6b" : "var(--faint)" }}
+        aria-pressed={mine}
+        aria-label={mine ? "Remove your like" : "Like"}
+      >
+        <ThumbsUp size={14} fill={mine ? "#2f6e6b" : "none"} /> {votes?.length ? votes.length : ""}
+      </button>
+    );
+  };
+
+  const PlanRow = ({ p, clash, gap }: { p: PlanItem; clash?: string; gap?: number | null }) => (
+    <>
+    {gap !== undefined && gap !== null && gap >= 120 && (
+      <p style={{ fontSize: 11.5, color: "var(--faint)", padding: "2px 0 2px 56px" }}>· {Math.floor(gap / 60)} h{gap % 60 ? ` ${gap % 60} m` : ""} free</p>
+    )}
     <div className="flex items-start gap-3 py-2" style={{ borderTop: "1px solid var(--line2)" }}>
       <span style={{ width: 44, fontSize: 12.5, color: "var(--faint)", paddingTop: 2, flexShrink: 0 }}>{p.time ?? ""}</span>
       <button className="flex-1 min-w-0 text-left" onClick={() => setForm({ kind: "plan", id: p.id })}>
         <span className="block" style={{ fontSize: 14, fontWeight: 600, textDecoration: p.status === "done" ? "line-through" : undefined, color: p.status === "done" ? "var(--faint)" : undefined }}>{p.title}</span>
-        {(p.notes || p.estimateRupees) && (
-          <span className="block truncate" style={{ fontSize: 12.5, color: "var(--faint)" }}>{[p.estimateRupees ? rupees(p.estimateRupees) : "", p.notes].filter(Boolean).join(" · ")}</span>
+        {(p.notes || p.estimateRupees || p.durationMin) && (
+          <span className="block truncate" style={{ fontSize: 12.5, color: "var(--faint)" }}>{[p.durationMin ? (p.durationMin < 60 ? `${p.durationMin} min` : `${p.durationMin / 60} h`) : "", p.estimateRupees ? rupees(p.estimateRupees) : "", p.notes].filter(Boolean).join(" · ")}</span>
         )}
+        {clash && <span className="flex items-center" style={{ gap: 4, fontSize: 12, color: "var(--amber)", fontWeight: 600 }}><AlertTriangle size={12} /> Overlaps with {clash}</span>}
       </button>
       <span className="flex items-center" style={{ gap: 10, flexShrink: 0 }}>
         {p.place && <a href={mapsLink(p.place, trip.destination)} target="_blank" rel="noreferrer" aria-label={`${p.place} on Google Maps`}><MapPin size={15} color="var(--indigo)" /></a>}
         {safeUrl(p.link) && <a href={safeUrl(p.link)} target="_blank" rel="noreferrer" aria-label="Open link"><Link2 size={15} color="var(--indigo)" /></a>}
+        <VoteButton votes={p.votes} onClick={() => saveTrip({ plan: toggleVote(trip.plan, p.id) })} />
         <Pill s={PLAN_STATUS_STYLE[p.status]} onClick={() => saveTrip({ plan: trip.plan.map((x) => (x.id === p.id ? { ...x, status: nextOf(PLAN_STATUSES, x.status) } : x)) })} />
       </span>
     </div>
+    </>
   );
 
   /* ---------- stays ---------- */
@@ -113,9 +146,10 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
   const toStay = (v: Record<string, string>, id: string): StayOption => ({
     id, name: v.name, link: str(v.link), area: str(v.area), pricePerNightRupees: num(v.pricePerNightRupees), nights: num(v.nights),
     rating: num(v.rating), pros: str(v.pros), cons: str(v.cons), status: (v.status as StayStatus) ?? "option",
+    votes: trip.stays.find((x) => x.id === id)?.votes,
   });
   const stayRank: Record<StayStatus, number> = { booked: 0, shortlisted: 1, option: 2 };
-  const stays = [...trip.stays].sort((a, b) => stayRank[a.status] - stayRank[b.status]);
+  const stays = [...trip.stays].sort((a, b) => stayRank[a.status] - stayRank[b.status] || votesOf(b) - votesOf(a));
   const bookedStayCost = trip.stays.filter((s) => s.status === "booked").reduce((s, x) => s + (x.pricePerNightRupees ?? 0) * (x.nights ?? 1), 0);
 
   /* ---------- bookings / links / todos ---------- */
@@ -160,6 +194,22 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5 items-start">
       <div>
+        <div className="flex flex-wrap mb-4" style={{ gap: 8 }}>
+          <button className="btn btn-plain flex items-center gap-1.5" onClick={() => setCopying(true)}><Copy size={14} /> Copy from a past trip</button>
+        </div>
+
+        {docs && docs.items.length > 0 && (
+          <div className="card mb-5" style={{ padding: 14, borderColor: "var(--amber)" }}>
+            <p className="flex items-center" style={{ gap: 6, fontSize: 14, fontWeight: 700 }}><AlertTriangle size={15} color="var(--amber)" /> Check your documents</p>
+            {docs.items.map((d) => (
+              <p key={`${d.name}-${d.owner}`} style={{ fontSize: 13.5, marginTop: 6 }}>
+                <strong>{d.name}</strong> ({d.owner}) — {d.problem === "expired" ? "expired" : d.problem === "expires_during" ? "expires during the trip" : "has under 6 months left when you're back"} · {dayLabel(d.expiryDate)}
+              </p>
+            ))}
+            <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>From the Documents section. Many countries need 6 months of passport validity.</p>
+          </div>
+        )}
+
         {/* Weather */}
         {weather && (weather.days.length > 0 || weather.note) && (
           <Section title={`Weather${weather.place ? ` · ${weather.place}` : ""}`}>
@@ -191,13 +241,18 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
           {planEstimate > 0 && <p style={{ fontSize: 12.5, color: "var(--faint)", marginBottom: 8 }}>Estimated: {rupees(planEstimate)}</p>}
           {Array.from({ length: trip.days }, (_, i) => i + 1).map((day) => {
             const items = trip.plan.filter((p) => p.day === day).sort(byTime);
+            const clashes = timelineClashes(items);
+            const route = directionsLink(items.map((p) => p.place ?? "").filter(Boolean), trip.destination);
             return (
               <div key={day} className="mb-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between" style={{ gap: 8 }}>
                   <p style={{ fontSize: 13, fontWeight: 700 }}>Day {day}{trip.startDate && <span style={{ color: "var(--faint)", fontWeight: 500 }}> · {dayLabel(dateOfDay(trip.startDate, day))}</span>}</p>
-                  <button onClick={() => setForm({ kind: "plan", day })} aria-label={`Add to day ${day}`}><Plus size={14} color="var(--faint)" /></button>
+                  <span className="flex items-center" style={{ gap: 10 }}>
+                    {route && <a href={route} target="_blank" rel="noreferrer" className="flex items-center" style={{ gap: 4, fontSize: 12, color: "var(--indigo)", fontWeight: 600 }}><Navigation size={12} /> Route for the day</a>}
+                    <button onClick={() => setForm({ kind: "plan", day })} aria-label={`Add to day ${day}`}><Plus size={14} color="var(--faint)" /></button>
+                  </span>
                 </div>
-                {items.map((p) => <PlanRow key={p.id} p={p} />)}
+                {items.map((p, i) => <PlanRow key={p.id} p={p} clash={clashes.get(p.id)} gap={i > 0 ? gapAfter(items[i - 1], p) : undefined} />)}
                 {!items.length && <p style={{ fontSize: 12.5, color: "var(--faint)", padding: "4px 0" }}>Nothing planned yet.</p>}
               </div>
             );
@@ -205,7 +260,7 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
           {unscheduled.length > 0 && (
             <div className="mt-2">
               <p style={{ fontSize: 13, fontWeight: 700 }}>Ideas, not on a day yet</p>
-              {unscheduled.sort(byTime).map((p) => <PlanRow key={p.id} p={p} />)}
+              {unscheduled.sort((a, b) => votesOf(b) - votesOf(a) || byTime(a, b)).map((p) => <PlanRow key={p.id} p={p} />)}
             </div>
           )}
         </Section>
@@ -226,6 +281,7 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
                       {[s.area, s.pricePerNightRupees ? `${rupees(s.pricePerNightRupees)}/night` : "", s.pricePerNightRupees && s.nights ? `${rupees(s.pricePerNightRupees * s.nights)} for ${s.nights} nights` : ""].filter(Boolean).join(" · ")}
                     </span>
                   </button>
+                  <VoteButton votes={s.votes} onClick={() => saveTrip({ stays: toggleVote(trip.stays, s.id) })} />
                   <Pill s={STAY_STATUS_STYLE[s.status]} onClick={() => saveTrip({ stays: trip.stays.map((x) => (x.id === s.id ? { ...x, status: nextOf(["option", "shortlisted", "booked"] as const, x.status) } : x)) })} />
                 </div>
                 {s.rating && <p style={{ marginTop: 4 }}>{Array.from({ length: s.rating }, (_, i) => <Star key={i} size={12} fill="#a8741a" color="#a8741a" style={{ display: "inline" }} />)}</p>}
@@ -288,6 +344,9 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
           action={<button className="btn btn-plain flex items-center gap-1" style={smallBtn} onClick={() => setForm({ kind: "booking" })}><Plus size={13} /> Add</button>}
         >
           {!bookings.length && <p style={{ fontSize: 13.5, color: "var(--faint)" }}>Flights, trains, stays and activities — with the PNR handy.</p>}
+          <p className="flex items-start" style={{ gap: 6, fontSize: 12, color: "var(--faint)", marginBottom: 6 }}>
+            <CalendarClock size={13} style={{ marginTop: 1, flexShrink: 0 }} /> Dated bookings (and to-dos with a due date) show up in your phone calendar with alerts — set it up once from Dates → Calendar sync.
+          </p>
           {bookings.map((b) => (
             <button key={b.id} className="w-full text-left py-2" style={{ borderTop: "1px solid var(--line2)" }} onClick={() => setForm({ kind: "booking", id: b.id })}>
               <span className="flex items-center gap-2">
@@ -327,6 +386,24 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
             <div className="flex justify-between" style={{ borderTop: "1px solid var(--line2)", paddingTop: 8, fontSize: 14, fontWeight: 700 }}>
               <span>Planned total</span><span>{rupees(budgetTotal)}</span>
             </div>
+            {(() => {
+              const budget = trip.budgetRupees ?? budgetTotal;
+              const shortlisted = trip.stays.filter((x) => x.status !== "option").reduce((sum, x) => sum + (x.pricePerNightRupees ?? 0) * (x.nights ?? 1), 0);
+              const estimate = planEstimate + (shortlisted || bookedStayCost);
+              if (!budget || !estimate) return null;
+              const pct = Math.min(100, (estimate / budget) * 100);
+              return (
+                <div style={{ marginTop: 4 }}>
+                  <div className="flex justify-between" style={{ fontSize: 12.5, marginBottom: 4 }}>
+                    <span style={{ color: "var(--faint)" }}>Estimated so far</span>
+                    <span style={{ fontWeight: 700, color: estimate > budget ? "var(--red)" : undefined }}>{rupees(estimate)} of {rupees(budget)}</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 6, background: "var(--line2)", overflow: "hidden" }}>
+                    <div style={{ height: 6, width: `${pct}%`, background: estimate > budget ? "var(--red)" : "#1b8a6b" }} />
+                  </div>
+                </div>
+              );
+            })()}
             {(planEstimate > 0 || bookedStayCost > 0) && (
               <p style={{ fontSize: 12.5, color: "var(--faint)" }}>
                 So far: {[planEstimate ? `${rupees(planEstimate)} in itinerary estimates` : "", bookedStayCost ? `${rupees(bookedStayCost)} booked stays` : ""].filter(Boolean).join(" · ")}. Actual spend is on the Expenses tab.
@@ -366,6 +443,8 @@ export function PlanTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: Part
           </div>
         </Section>
       </div>
+
+      {copying && <CopyFromTrip trip={trip} onClose={() => setCopying(false)} onDone={onChanged} />}
 
       {/* Forms */}
       {form?.kind === "plan" && (

@@ -2,6 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/firestore";
 import { buildIcs, todayIST } from "@/lib/dates/logic";
 import type { DtEvent } from "@/lib/dates/types";
+import { tripIcsLines } from "@/lib/trips/ics";
+import { normalizeTrip } from "@/lib/trips/store";
+import type { Trip } from "@/lib/trips/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,9 +25,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
     return new Response("Not found", { status: 404 });
   }
 
-  const snap = await db().collection("dates").get();
+  const [snap, tripsSnap] = await Promise.all([db().collection("dates").get(), db().collection("trips").get()]);
   const events = snap.docs.map((d) => ({ ...(d.data() as DtEvent), id: d.id }));
-  const ics = buildIcs(events, todayIST());
+  // Trips ride along in the same feed: trip days, dated bookings and to-dos with due dates.
+  const trips = tripsSnap.docs.map((d) => normalizeTrip(d.data() as Trip));
+  const ics = buildIcs(events, todayIST(), "Our dates", tripIcsLines(trips, new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })));
   const download = new URL(req.url).searchParams.has("download");
   return new Response(ics, {
     headers: {

@@ -8,6 +8,7 @@ import { ChevronLeft, Lightbulb, MapPin, Plus } from "lucide-react";
 import { rangeLabel, todayIST, tripStatus, tripWhen } from "@/lib/trips/logic";
 import type { TripSummary, TripsResponse } from "@/lib/trips/types";
 import { TripForm } from "@/components/trips/TripForm";
+import { IdeasBoard } from "@/components/trips/IdeasBoard";
 import { Cover, fetcher, paiseToRupees, StatusPill } from "@/components/trips/shared";
 
 function TripCard({ t, today }: { t: TripSummary; today: string }) {
@@ -95,7 +96,9 @@ export function TripsHome() {
             <button className="btn btn-dark flex items-center gap-1.5" onClick={() => setCreating(true)}><Plus size={15} /> Plan a trip</button>
           </div>
         </div>
-      ) : (
+      ) : null}
+      {data && trips.length === 0 && <div className="mt-6"><IdeasBoard /></div>}
+      {data && trips.length > 0 && (
         <>
           {thisYear.length > 0 && (
             <div className="mb-8" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
@@ -123,6 +126,7 @@ export function TripsHome() {
               </div>
             </section>
           )}
+          <IdeasBoard />
           {groups.years.map(([y, list]) => <Grid key={y} title={`Memories · ${y}`} trips={list} today={today} />)}
         </>
       )}

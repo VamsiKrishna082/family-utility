@@ -155,7 +155,7 @@ export function bucketOf(daysAway: number, today: Ymd, date: Ymd): "today" | "we
 
 /* -------------------------------- ICS -------------------------------- */
 
-const icsEscape = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+export const icsEscape = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 
 /** RFC 5545 lines must fold at 75 octets. */
 function fold(line: string): string {
@@ -182,7 +182,12 @@ export function alarmTrigger(daysBefore: number): string {
   return `-P${Math.floor(hours / 24)}DT${hours % 24}H`;
 }
 
-export function buildIcs(events: DtEvent[], today: Ymd, calName = "Our dates"): string {
+/**
+ * `extra` is pre-built VEVENT lines from other sections (trip days, bookings,
+ * to-dos). An Asia/Kolkata VTIMEZONE is always included so timed events there
+ * resolve without relying on the client knowing the zone.
+ */
+export function buildIcs(events: DtEvent[], today: Ymd, calName = "Our dates", extra: string[] = []): string {
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
   const lines = [
     "BEGIN:VCALENDAR",
@@ -194,6 +199,9 @@ export function buildIcs(events: DtEvent[], today: Ymd, calName = "Our dates"): 
     "X-WR-TIMEZONE:Asia/Kolkata",
     "REFRESH-INTERVAL;VALUE=DURATION:PT12H",
     "X-PUBLISHED-TTL:PT12H",
+    "BEGIN:VTIMEZONE", "TZID:Asia/Kolkata",
+    "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0530", "TZOFFSETTO:+0530", "TZNAME:IST", "END:STANDARD",
+    "END:VTIMEZONE",
   ];
   for (const ev of events) {
     // Recurring: anchor on the first year we know (or this year); one-time: the date itself.
@@ -221,6 +229,6 @@ export function buildIcs(events: DtEvent[], today: Ymd, calName = "Our dates"): 
     }
     lines.push("END:VEVENT");
   }
-  lines.push("END:VCALENDAR");
+  lines.push(...extra, "END:VCALENDAR");
   return lines.map(fold).join("\r\n") + "\r\n";
 }

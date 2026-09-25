@@ -15,6 +15,14 @@ const Body = z.object({
   /** null unlinks the folder (the photos themselves stay in the Album). */
   folderId: z.string().min(1).max(200).nullable().optional(),
   folderName: z.string().max(200).optional(),
+  mood: z.string().max(8).nullable().optional(),
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  who: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  food: z.array(z.object({
+    id: z.string().min(1).max(40), name: z.string().trim().min(1).max(120), dish: z.string().trim().max(160).optional(),
+    rating: z.number().int().min(1).max(5).optional(), goBack: z.boolean().optional(),
+  })).max(60).optional(),
+  favourites: z.array(z.string().min(1).max(200)).max(4).optional(),
 });
 
 /** PUT /api/trips/:id/days/:day — save any part of one day's journal (merge). */
@@ -30,7 +38,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; day
     // A linked folder must be inside the Album library (same check the Album itself uses).
     if (body.folderId) await breadcrumbs(body.folderId, rootId());
 
-    const { folderId, folderName, ...rest } = body;
+    const { folderId, folderName, mood, rating, ...rest } = body;
     await daysCol(id).doc(String(day)).set(
       {
         tripId: id,
@@ -38,6 +46,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; day
         ...rest,
         ...(folderId === null ? { folderId: FieldValue.delete(), folderName: FieldValue.delete() } : {}),
         ...(folderId ? { folderId, folderName: folderName ?? "" } : {}),
+        ...(mood === null ? { mood: FieldValue.delete() } : mood ? { mood } : {}),
+        ...(rating === null ? { rating: FieldValue.delete() } : rating ? { rating } : {}),
         updatedAt: Date.now(),
         updatedBy: user.email,
       },

@@ -1,4 +1,4 @@
-import type { SharedCost, TripStatus } from "@/lib/trips/types";
+import type { BudgetKey, DocCheckItem, PlanItem, Settlement, SharedCost, TripDay, TripStatus, TripWrapUp } from "@/lib/trips/types";
 
 /** Pure date maths for trips — tested in scripts/trips.test.mjs. Dates are YYYY-MM-DD strings in IST. */
 
@@ -80,13 +80,18 @@ export function dayHasContent(d: { title: string; story: string; places: string[
  * people; balances are netted and settled with the fewest transfers
  * (largest debtor pays largest creditor). Amounts in rupees, 2 dp.
  */
-export function settleUp(costs: SharedCost[], rate = 1): { balances: Record<string, number>; transfers: { from: string; to: string; amount: number }[] } {
+export function settleUp(costs: SharedCost[], rate = 1, settlements: Settlement[] = []): { balances: Record<string, number>; transfers: { from: string; to: string; amount: number }[] } {
   const bal: Record<string, number> = {};
   for (const c of costs) {
     const people = c.splitAmong.length ? c.splitAmong : [c.paidBy];
     const amount = c.amount * rate;
     bal[c.paidBy] = (bal[c.paidBy] ?? 0) + amount;
     for (const p of people) bal[p] = (bal[p] ?? 0) - amount / people.length;
+  }
+  // Money already paid back (in rupees) moves the balances toward zero.
+  for (const st of settlements) {
+    bal[st.from] = (bal[st.from] ?? 0) + st.amount;
+    bal[st.to] = (bal[st.to] ?? 0) - st.amount;
   }
   const round = (n: number) => Math.round(n * 100) / 100;
   for (const k of Object.keys(bal)) bal[k] = round(bal[k]);
@@ -122,3 +127,119 @@ export function safeUrl(u: string | undefined): string | undefined {
 /** Google Maps search link for a place, biased to the trip's destination. */
 export const mapsLink = (place: string, destination?: string) =>
   `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination ? `${place}, ${destination}` : place)}`;
+
+/* ------------------------------ Planner ------------------------------ */
+
+const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const DEFAULT_DURATION = 60;
+
+/**
+ * Clashes on one day's timeline: an item that starts before the previous
+ * timed item has finished (its duration, 1 h if unset). Returns item id →
+ * the title it overlaps with.
+ */
+export function timelineClashes(items: Pick<PlanItem, "id" | "time" | "durationMin" | "title">[]): Map<string, string> {
+  const timed = items.filter((i) => i.time).sort((a, b) => a.time!.localeCompare(b.time!));
+  const out = new Map<string, string>();
+  for (let i = 1; i < timed.length; i++) {
+    const prev = timed[i - 1];
+    const end = toMin(prev.time!) + (prev.durationMin ?? DEFAULT_DURATION);
+    if (toMin(timed[i].time!) < end) out.set(timed[i].id, prev.title);
+  }
+  return out;
+}
+
+/** Free time between consecutive timed items (≥ 2 h shows as a gap on the timeline). */
+export function gapAfter(prev: Pick<PlanItem, "time" | "durationMin">, next: Pick<PlanItem, "time">): number | null {
+  if (!prev.time || !next.time) return null;
+  return toMin(next.time) - (toMin(prev.time) + (prev.durationMin ?? DEFAULT_DURATION));
+}
+
+/** Google Maps directions through a day's places in order (up to 9 stops, Maps' own limit for links). */
+export function directionsLink(places: string[], destination?: string): string | null {
+  const stops = places.filter(Boolean).slice(0, 10).map((p) => (destination ? `${p}, ${destination}` : p));
+  if (stops.length < 2) return null;
+  const params = new URLSearchParams({ api: "1", origin: stops[0], destination: stops[stops.length - 1], travelmode: "driving" });
+  if (stops.length > 2) params.set("waypoints", stops.slice(1, -1).join("|"));
+  return `https://www.google.com/maps/dir/?${params}`;
+}
+
+/** Heads on the trip: "Us" is the two of you, every other name is one person. */
+export const headCount = (travellers: string[]) => travellers.reduce((n, t) => n + (t.trim().toLowerCase() === "us" ? 2 : 1), 0) || 2;
+
+/** Maps a Money category onto the trip's budget-plan buckets (Transport → travel, Stays → stay, …). */
+export function budgetBucket(categoryGroup: string, categoryName: string): BudgetKey {
+  const g = `${categoryGroup} ${categoryName}`.toLowerCase();
+  if (/stay|hotel|homestay|resort|airbnb/.test(g)) return "stay";
+  if (/transport|fuel|cab|auto|metro|flight|train|bus|travel|trip|parking|toll/.test(g)) return "travel";
+  if (/food|dining|restaurant|snack|grocer/.test(g)) return "food";
+  if (/shopping|clothing|electronics|gift/.test(g)) return "shopping";
+  if (/fun|movie|outing|hobb|activity|ticket/.test(g)) return "activities";
+  return "other";
+}
+
+/**
+ * Passport / ID check: expired already, expires before the trip ends, or has
+ * under 6 months left at the trip's end (many countries require 6 months).
+ */
+export function docProblem(expiryDate: string, tripEnd: string, today: string): DocCheckItem["problem"] | null {
+  if (expiryDate < today) return "expired";
+  if (expiryDate <= tripEnd) return "expires_during";
+  if (expiryDate < addDays(tripEnd, 183)) return "under_6_months";
+  return null;
+}
+
+/** UPI "pay" deep link (works from Android/iOS UPI apps). */
+export function upiLink(payee: string, payeeName: string, amount: number, note: string): string {
+  const p = new URLSearchParams({ pa: payee, pn: payeeName, am: amount.toFixed(2), cu: "INR", tn: note.slice(0, 50) });
+  return `upi://pay?${p}`;
+}
+
+/* ------------------------------ Journal ------------------------------ */
+
+/**
+ * Photo-folder suggestions: for each day, folders whose photos were taken
+ * on that day, best match first. `folders` carries each folder's photo
+ * dates (from EXIF when Drive has it).
+ */
+export function matchFolders(
+  dayDates: { day: number; date: string }[],
+  folders: { folderId: string; folderName: string; path: string; photoDates: string[] }[],
+): { day: number; date: string; folderId: string; folderName: string; path: string; photosOnDay: number; photosTotal: number }[] {
+  const out = [];
+  for (const { day, date } of dayDates) {
+    const hits = folders
+      .map((f) => ({ ...f, on: f.photoDates.filter((d) => d === date).length }))
+      .filter((f) => f.on > 0)
+      .sort((a, b) => b.on / b.photoDates.length - a.on / a.photoDates.length || b.on - a.on)
+      .slice(0, 3);
+    for (const h of hits) out.push({ day, date, folderId: h.folderId, folderName: h.folderName, path: h.path, photosOnDay: h.on, photosTotal: h.photoDates.length });
+  }
+  return out;
+}
+
+/** Group a day's photo times (ISO) into morning / afternoon / evening / night, in IST. */
+export function partOfDay(iso: string): "Morning" | "Afternoon" | "Evening" | "Night" {
+  const h = Number(new Date(iso).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false }));
+  if (h >= 5 && h < 12) return "Morning";
+  if (h >= 12 && h < 17) return "Afternoon";
+  if (h >= 17 && h < 21) return "Evening";
+  return "Night";
+}
+
+/** The trip's wrap-up numbers. `photosByDay` comes from the linked folders. */
+export function wrapUp(days: TripDay[], photosByDay: Record<number, number>): TripWrapUp {
+  const rated = days.filter((d) => d.rating);
+  const best = rated.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || a.day - b.day)[0];
+  const places = new Set(days.flatMap((d) => d.places.map((p) => p.toLowerCase())));
+  return {
+    days: days.length,
+    daysWritten: days.filter((d) => d.story.trim() || d.title.trim()).length,
+    places: places.size,
+    photos: Object.values(photosByDay).reduce((s, n) => s + n, 0),
+    bestDay: best ? best.day : null,
+    moods: days.map((d) => d.mood).filter((m): m is string => Boolean(m)),
+    highlights: days.filter((d) => d.highlight.trim()).map((d) => ({ day: d.day, text: d.highlight.trim() })),
+    foodSpots: days.reduce((n, d) => n + (d.food?.length ?? 0), 0),
+  };
+}

@@ -37,7 +37,11 @@ export type PlanItem = {
   link?: string;
   notes?: string;
   estimateRupees?: number;
+  /** How long it takes, for spotting clashes on the timeline. */
+  durationMin?: number;
   status: PlanStatus;
+  /** Person ids (vamsi / varshini) who 👍 it. */
+  votes?: string[];
 };
 
 export const STAY_STATUSES = ["option", "shortlisted", "booked"] as const;
@@ -54,6 +58,7 @@ export type StayOption = {
   pros?: string;
   cons?: string;
   status: StayStatus;
+  votes?: string[];
 };
 
 export type TripLink = { id: string; title: string; url: string; note?: string };
@@ -77,6 +82,15 @@ export type SharedCost = {
 };
 
 export type GeoPoint = { name: string; lat: number; lon: number };
+
+/** A recorded "X paid Y back" — reduces what the settle-up still shows. */
+export type Settlement = { id: string; from: string; to: string; amount: number; date: string };
+
+/** Cash / forex log: money taken out or exchanged ("in") and cash spent ("out"), per currency. */
+export type CashEntry = { id: string; date: string; kind: "in" | "out"; amount: number; currency: string; inrCost?: number; note?: string };
+
+/** A receipt photo stored for the trip (GCS), optionally tied to one expense or shared cost. */
+export type TripReceipt = { id: string; key: string; name: string; contentType: string; txId?: string; sharedId?: string; uploadedAt: number; uploadedBy: string };
 
 export type Trip = {
   id: string;
@@ -104,6 +118,11 @@ export type Trip = {
   links: TripLink[];
   todos: TripTodo[];
   shared: SharedCost[];
+  settlements: Settlement[];
+  /** UPI ids per traveller name, for "pay me" links in settle-up messages. */
+  upi: Record<string, string>;
+  cash: CashEntry[];
+  receipts: TripReceipt[];
   /** Destination coordinates (for weather + map centre), looked up once. */
   geo?: GeoPoint;
   /** Private read-only journal link token, when sharing is on. */
@@ -125,9 +144,21 @@ export type TripDay = {
   highlight: string;
   folderId?: string;
   folderName?: string;
+  /** How the day felt (an emoji) and a 1–5 rating — the wrap-up's "best day" comes from these. */
+  mood?: string;
+  rating?: number;
+  /** Traveller names who were there (group trips); empty = everyone. */
+  who?: string[];
+  food?: FoodNote[];
+  /** Up to 4 favourite photo ids — shown first on the shared journal. */
+  favourites?: string[];
+  voice?: VoiceNote[];
   updatedAt: number;
   updatedBy: string;
 };
+
+export type FoodNote = { id: string; name: string; dish?: string; rating?: number; goBack?: boolean };
+export type VoiceNote = { id: string; key: string; contentType: string; durationSec: number; createdAt: number; by: string };
 
 export type TripStatus = "idea" | "upcoming" | "ongoing" | "completed";
 
@@ -135,7 +166,7 @@ export type TripSummary = Trip & { spentPaise: number; expenseCount: number };
 export type TripsResponse = { items: TripSummary[] };
 
 /** hiddenDays: days past the trip's length that still hold writing/photos (kept when the trip was shortened). */
-export type TripDetailResponse = { trip: Trip; days: TripDay[]; hiddenDays: number[] };
+export type TripDetailResponse = { trip: Trip; days: TripDay[]; hiddenDays: number[]; me: { id: string; name: string } };
 
 export type TripExpense = {
   id: string;
@@ -150,7 +181,8 @@ export type TripExpense = {
   paidBy: string;
 };
 
-export type TripExpensesResponse = { items: TripExpense[] };
+/** refunds: Money income entries linked to the trip (cancellations, refunds) — they bring the net cost down. */
+export type TripExpensesResponse = { items: TripExpense[]; refunds: TripExpense[] };
 export type TripCandidatesResponse = { items: (TripExpense & { otherTripId?: string })[]; month: string; category: string };
 
 export type WeatherDay = { date: string; code: number; max: number; min: number; rainPct: number };
@@ -163,3 +195,23 @@ export const PACKING_STARTER = [
 ];
 
 export const TODO_STARTER = ["Book travel tickets", "Book stay", "Apply for leave", "Check ID / passport validity", "Arrange home & plants care"];
+
+/** "Someday" places — not a trip yet. Convert one into a trip when it's time. */
+export type TripIdea = {
+  id: string;
+  place: string;
+  why?: string;
+  bestSeason?: string;
+  roughCostRupees?: number;
+  days?: number;
+  link?: string;
+  votes?: string[];
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+};
+export type TripIdeasResponse = { items: TripIdea[]; me: { id: string; name: string } };
+
+export type FolderSuggestion = { day: number; date: string; folderId: string; folderName: string; path: string; photosOnDay: number; photosTotal: number };
+export type TripWrapUp = { days: number; daysWritten: number; places: number; photos: number; bestDay: number | null; moods: string[]; highlights: { day: number; text: string }[]; foodSpots: number };
+export type DocCheckItem = { name: string; owner: string; expiryDate: string; problem: "expired" | "expires_during" | "under_6_months" };
