@@ -151,7 +151,7 @@ export type TripExpense = {
 };
 
 export type TripExpensesResponse = { items: TripExpense[] };
-export type TripCandidatesResponse = { items: (TripExpense & { otherTripId?: string })[]; from: string; to: string };
+export type TripCandidatesResponse = { items: (TripExpense & { otherTripId?: string })[]; month: string; category: string };
 
 export type WeatherDay = { date: string; code: number; max: number; min: number; rainPct: number };
 export type TripWeatherResponse = { place: string | null; days: WeatherDay[]; note?: string };

@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { ArrowRight, Link2, Plus, Search, X } from "lucide-react";
 import { dateOfDay, dayLabel, daysBetween, phaseOf, settleUp, todayIST, type Phase } from "@/lib/trips/logic";
 import { BUDGET_KEYS, BUDGET_LABEL, type BudgetKey, type SharedCost, type Trip, type TripCandidatesResponse, type TripExpense, type TripExpensesResponse } from "@/lib/trips/types";
-import type { MoneyCategoriesResponse } from "@/lib/types";
+import type { MoneyCategoriesResponse, MoneyCategory } from "@/lib/types";
 import { MoneyQuickAdd } from "@/components/MoneyQuickAdd";
 import { Chip, fetcher, inputStyle, labelStyle, Modal, paiseToRupees, rupees, Section, send, smallBtn, uid } from "@/components/trips/shared";
 
@@ -22,19 +22,44 @@ function bucketOf(e: TripExpense): BudgetKey {
   return "other";
 }
 
-function LinkExisting({ trip, onClose, onDone }: { trip: Trip; onClose: () => void; onDone: () => void }) {
-  const { data } = useSWR<TripCandidatesResponse>(`/api/trips/${trip.id}/candidates`, fetcher);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+/** Month choices: the last 24 months plus the trip's own months, newest first. */
+function monthOptions(trip: Trip): string[] {
+  const set = new Set<string>();
+  const now = new Date();
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    set.add(d.toISOString().slice(0, 7));
+  }
+  if (trip.startDate) set.add(trip.startDate.slice(0, 7));
+  if (trip.endDate) set.add(trip.endDate.slice(0, 7));
+  return [...set].sort().reverse();
+}
+const monthLabel = (m: string) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+
+function LinkExisting({ trip, categories, onClose, onDone }: { trip: Trip; categories: MoneyCategory[]; onClose: () => void; onDone: () => void }) {
+  const [month, setMonth] = useState(trip.startDate?.slice(0, 7) ?? todayIST().slice(0, 7));
+  const [category, setCategory] = useState("");
+  const { data, isLoading } = useSWR<TripCandidatesResponse>(`/api/trips/${trip.id}/candidates?month=${month}&category=${category}`, fetcher, { keepPreviousData: true });
+  const [picked, setPicked] = useState<Map<string, number>>(new Map());
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const needle = q.trim().toLowerCase();
   const items = (data?.items ?? []).filter((e) => !needle || `${e.categoryName} ${e.subcategory ?? ""} ${e.note}`.toLowerCase().includes(needle));
-  const total = items.filter((e) => picked.has(e.id)).reduce((s, e) => s + e.amountPaise, 0);
+  const total = [...picked.values()].reduce((s, v) => s + v, 0);
+  const allShownPicked = items.length > 0 && items.every((e) => picked.has(e.id));
+  const expenseCats = categories.filter((c) => c.type === "expense").sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+
+  const toggle = (e: TripExpense) => setPicked((s) => { const n = new Map(s); if (n.has(e.id)) n.delete(e.id); else n.set(e.id, e.amountPaise); return n; });
+  const toggleAll = () => setPicked((s) => {
+    const n = new Map(s);
+    if (allShownPicked) items.forEach((e) => n.delete(e.id)); else items.forEach((e) => n.set(e.id, e.amountPaise));
+    return n;
+  });
 
   const link = async () => {
     setBusy(true);
     try {
-      await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: [...picked], link: true });
+      await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: [...picked.keys()], link: true });
       onDone();
       onClose();
     } finally {
@@ -42,32 +67,47 @@ function LinkExisting({ trip, onClose, onDone }: { trip: Trip; onClose: () => vo
     }
   };
 
+  const selectStyle = { flex: 1, minWidth: 0, borderRadius: 10, border: "1px solid var(--line)", padding: "8px 10px", fontSize: 14, background: "var(--card)" } as const;
+
   return (
     <Modal title="Link expenses from Money" onClose={onClose} wide>
       <p style={{ fontSize: 13, color: "var(--dim)", marginBottom: 10 }}>
-        Expenses from {data?.from ? dayLabel(data.from) : "3 months before"} to {data?.to ? dayLabel(data.to) : "a month after"} — bookings and shopping often happen weeks early. Linking doesn&apos;t change them in Money.
+        Pick any month and category — tickets and shopping are often months before the trip. Linking doesn&apos;t change anything in Money; you can pick from several months before linking.
       </p>
+      <div className="flex mb-2" style={{ gap: 8 }}>
+        <select aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={selectStyle}>
+          <option value="all">All months</option>
+          {monthOptions(trip).map((m) => <option key={m} value={m}>{monthLabel(m)}{trip.startDate?.startsWith(m) ? " · trip" : ""}</option>)}
+        </select>
+        <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} style={selectStyle}>
+          <option value="">All categories</option>
+          {expenseCats.map((c) => <option key={c.id} value={c.id}>{c.group} · {c.name}</option>)}
+        </select>
+      </div>
       <div className="flex items-center gap-2 mb-2" style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "6px 10px" }}>
         <Search size={14} color="var(--faint)" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search category or note" className="flex-1 outline-none" style={{ fontSize: 14, background: "transparent" }} aria-label="Search expenses" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search sub-category or note" className="flex-1 outline-none" style={{ fontSize: 14, background: "transparent" }} aria-label="Search expenses" />
       </div>
-      <div style={{ maxHeight: 360, overflowY: "auto" }}>
-        {!data && <p style={{ fontSize: 13, color: "var(--faint)", padding: 10 }}>Loading…</p>}
-        {data && items.length === 0 && <p style={{ fontSize: 13, color: "var(--faint)", padding: 10 }}>No other expenses in that window.</p>}
-        {items.map((e) => {
-          const on = picked.has(e.id);
-          return (
-            <label key={e.id} className="flex items-center gap-3 py-2" style={{ borderTop: "1px solid var(--line2)", cursor: "pointer" }}>
-              <input type="checkbox" checked={on} onChange={() => setPicked((s) => { const n = new Set(s); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); return n; })} style={{ width: 17, height: 17 }} />
-              <span style={{ width: 70, fontSize: 12.5, color: "var(--faint)", flexShrink: 0 }}>{dayLabel(e.date).replace(/^\w+, /, "")}</span>
-              <span className="flex-1 min-w-0">
-                <span className="block truncate" style={{ fontSize: 14 }}>{[e.categoryName, e.subcategory].filter(Boolean).join(" · ")}</span>
-                <span className="block truncate" style={{ fontSize: 12, color: "var(--faint)" }}>{e.note}{e.otherTripId ? " · on another trip (will move here)" : ""}</span>
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{paiseToRupees(e.amountPaise)}</span>
-            </label>
-          );
-        })}
+      {items.length > 0 && (
+        <label className="flex items-center gap-2 py-1.5" style={{ fontSize: 13, color: "var(--dim)", cursor: "pointer" }}>
+          <input type="checkbox" checked={allShownPicked} onChange={toggleAll} style={{ width: 16, height: 16 }} />
+          Select all {items.length} shown
+        </label>
+      )}
+      <div style={{ maxHeight: 340, overflowY: "auto" }}>
+        {isLoading && !data && <p style={{ fontSize: 13, color: "var(--faint)", padding: 10 }}>Loading…</p>}
+        {data && items.length === 0 && <p style={{ fontSize: 13, color: "var(--faint)", padding: 10 }}>No expenses for this month and category{needle ? " matching the search" : ""}.</p>}
+        {items.map((e) => (
+          <label key={e.id} className="flex items-center gap-3 py-2" style={{ borderTop: "1px solid var(--line2)", cursor: "pointer" }}>
+            <input type="checkbox" checked={picked.has(e.id)} onChange={() => toggle(e)} style={{ width: 17, height: 17 }} />
+            <span style={{ width: 92, fontSize: 12.5, color: "var(--faint)", flexShrink: 0 }}>{dayLabel(e.date)}</span>
+            <span className="flex-1 min-w-0">
+              <span className="block truncate" style={{ fontSize: 14 }}>{[e.categoryName, e.subcategory].filter(Boolean).join(" · ")}</span>
+              <span className="block truncate" style={{ fontSize: 12, color: "var(--faint)" }}>{e.note}{e.otherTripId ? " · on another trip (will move here)" : ""}</span>
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{paiseToRupees(e.amountPaise)}</span>
+          </label>
+        ))}
       </div>
       <button className="btn btn-dark w-full mt-3" disabled={!picked.size || busy} onClick={link}>
         {busy ? "Linking…" : picked.size ? `Link ${picked.size} expense${picked.size === 1 ? "" : "s"} · ${paiseToRupees(total)}` : "Pick expenses to link"}
@@ -186,7 +226,7 @@ export function ExpensesTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: 
 
       <div className="flex flex-wrap mb-5" style={{ gap: 8 }}>
         <button className="btn btn-dark flex items-center gap-1.5" onClick={() => setAdding(true)} disabled={!cats}><Plus size={15} /> Add expense</button>
-        <button className="btn btn-plain flex items-center gap-1.5" onClick={() => setLinking(true)} disabled={!trip.startDate}><Link2 size={15} /> Link existing from Money</button>
+        <button className="btn btn-plain flex items-center gap-1.5" onClick={() => setLinking(true)} disabled={!cats}><Link2 size={15} /> Link existing from Money</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-5 items-start">
@@ -293,7 +333,7 @@ export function ExpensesTab({ trip, saveTrip }: { trip: Trip; saveTrip: (patch: 
           onSaved={() => mutate()}
         />
       )}
-      {linking && <LinkExisting trip={trip} onClose={() => setLinking(false)} onDone={() => mutate()} />}
+      {linking && cats && <LinkExisting trip={trip} categories={cats.items} onClose={() => setLinking(false)} onDone={() => mutate()} />}
       {shared && (
         <SharedCostForm
           trip={trip}

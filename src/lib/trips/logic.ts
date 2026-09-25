@@ -70,11 +70,6 @@ export function dayLabel(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-/** Window of Money expenses offered for linking: 3 months before the trip to 1 month after. */
-export function candidateWindow(startDate: string, endDate: string): { from: string; to: string } {
-  return { from: addDays(startDate, -92), to: addDays(endDate, 31) };
-}
-
 /** A day "has content" if anything was written or linked — those are never dropped silently when a trip is shortened. */
 export function dayHasContent(d: { title: string; story: string; places: string[]; highlight: string; folderId?: string }): boolean {
   return Boolean(d.title.trim() || d.story.trim() || d.places.length || d.highlight.trim() || d.folderId);

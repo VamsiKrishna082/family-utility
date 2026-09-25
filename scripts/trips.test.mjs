@@ -1,7 +1,7 @@
 // Pure unit tests for Trips date maths — no Firestore, no network. Run: npm run test:trips
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { candidateWindow, safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
+import { safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
 
 test("days ↔ end date", () => {
   assert.equal(endDateOf("2026-12-30", 5), "2027-01-03");
@@ -23,7 +23,6 @@ test("expense phases around the trip", () => {
   assert.equal(phaseOf("2026-08-15", "2026-10-10", "2026-10-14"), "before");
   assert.equal(phaseOf("2026-10-12", "2026-10-10", "2026-10-14"), "during");
   assert.equal(phaseOf("2026-10-20", "2026-10-10", "2026-10-14"), "after");
-  assert.deepEqual(candidateWindow("2026-10-10", "2026-10-14"), { from: "2026-07-10", to: "2026-11-14" });
 });
 
 test("range labels", () => {

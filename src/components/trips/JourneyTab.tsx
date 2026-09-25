@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { Check, ChevronDown, ChevronUp, FolderOpen, FolderPlus, ImageIcon, MapPin, Star, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, FolderOpen, ImageIcon, MapPin, Star, X } from "lucide-react";
 import { dateOfDay, dayLabel, mapsLink, todayIST, tripStatus, daysBetween } from "@/lib/trips/logic";
 import type { Trip, TripDay } from "@/lib/trips/types";
 import type { BrowseResponse, Entry } from "@/lib/types";
@@ -178,15 +178,12 @@ function DayCard({ trip, day, open, onToggle, onSaved, onCover }: { trip: Trip; 
   );
 }
 
-/** The journal: one card per day (story, places, best moment, photos), the trip map, and album folder setup. */
+/** The journal: one card per day (story, places, best moment, its linked photo folder) and the trip map. */
 export function JourneyTab({ trip, days, hiddenDays, onChanged, saveTrip }: { trip: Trip; days: TripDay[]; hiddenDays: number[]; onChanged: () => void; saveTrip: (patch: Partial<Trip>) => Promise<void> }) {
   const today = todayIST();
   const status = tripStatus(trip.startDate, trip.endDate, today);
   const todayDay = status === "ongoing" && trip.startDate ? daysBetween(trip.startDate, today) + 1 : null;
   const [openDays, setOpenDays] = useState<Set<number>>(() => new Set(todayDay ? [todayDay] : days.length <= 2 ? days.map((d) => d.day) : [1]));
-  const [makingFolders, setMakingFolders] = useState(false);
-  const [folderMsg, setFolderMsg] = useState("");
-  const missingFolders = days.filter((d) => !d.folderId).length;
   const placesKey = days.map((d) => d.places.join("|")).join("/");
 
   const toggle = (n: number) => setOpenDays((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x; });
@@ -221,34 +218,8 @@ export function JourneyTab({ trip, days, hiddenDays, onChanged, saveTrip }: { tr
         <Section title="Map">
           <TripMap tripId={trip.id} refreshKey={placesKey} />
         </Section>
-        <Section title="Photos">
-          <p style={{ fontSize: 13.5, color: "var(--dim)" }}>
-            {missingFolders === 0
-              ? "Every day has a photo folder linked."
-              : `${missingFolders} day${missingFolders === 1 ? " has" : "s have"} no photo folder yet. Link existing Album folders day by day, or create them all at once.`}
-          </p>
-          {missingFolders > 0 && (
-            <button className="btn btn-plain flex items-center gap-1.5 mt-3" onClick={() => setMakingFolders(true)}>
-              <FolderPlus size={15} /> Create Album folders
-            </button>
-          )}
-          {trip.albumFolderId && <Link href={`/album?folder=${trip.albumFolderId}`} className="block mt-3" style={{ fontSize: 13, color: "var(--indigo)", fontWeight: 600 }}>Open the trip&apos;s Album folder</Link>}
-          {folderMsg && <p style={{ fontSize: 12.5, color: "#2f6e6b", marginTop: 8, fontWeight: 600 }}>{folderMsg}</p>}
-        </Section>
       </div>
 
-      {makingFolders && (
-        <FolderPicker
-          title={trip.albumFolderId ? "Add day folders" : `Where should “${trip.name}” go?`}
-          confirmLabel={trip.albumFolderId ? "Create day folders" : "Create trip folders here"}
-          onClose={() => setMakingFolders(false)}
-          onPick={async (folderId, _name, isRoot) => {
-            const res = await send<{ created: number }>(`/api/trips/${trip.id}/album`, "POST", { parentId: isRoot ? null : folderId });
-            setFolderMsg(`Created ${res.created} day folder${res.created === 1 ? "" : "s"} and linked them.`);
-            onChanged();
-          }}
-        />
-      )}
     </div>
   );
 }
