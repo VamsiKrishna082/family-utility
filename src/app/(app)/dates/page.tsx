@@ -1,5 +1,5 @@
-import { DatesBrowser } from "@/components/DatesBrowser";
+import { DatesSection } from "@/components/dates/DatesSection";
 
 export default function DatesPage() {
-  return <DatesBrowser />;
+  return <DatesSection />;
 }

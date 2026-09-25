@@ -360,21 +360,6 @@ export type NwDashboardResponse = {
 };
 
 /* ------------------------------------------------------------------ */
-/* Dates — birthdays, anniversaries                                    */
-/* ------------------------------------------------------------------ */
-export const DATE_TYPES = ["birthday", "anniversary", "other"] as const;
-
-export type ImportantDate = {
-  id: string;
-  title: string;
-  date: string; // yyyy-mm-dd (year is ignored for recurring)
-  type: (typeof DATE_TYPES)[number];
-  recurring: boolean;
-  notes: string;
-  createdAt: number;
-};
-
-/* ------------------------------------------------------------------ */
 /* Trips                                                               */
 /* ------------------------------------------------------------------ */
 export const TRIP_STATUSES = ["planning", "upcoming", "past"] as const;

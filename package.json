@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p ${PORT:-8080}",
     "typecheck": "tsc --noEmit",
+    "test:dates": "node --experimental-strip-types --no-warnings --test scripts/dates.test.mjs",
     "test:food": "node --experimental-strip-types --no-warnings --test scripts/fa-day.test.mjs",
     "drive:token": "node scripts/drive-token.mjs",
     "deploy": "gcloud run deploy household --source . --project=household-509314 --region=asia-southeast1 --allow-unauthenticated"
