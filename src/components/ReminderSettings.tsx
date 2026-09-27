@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { Bell, BellOff, Loader2, Send } from "lucide-react";
 import { REMINDER_KIND_LABEL } from "@/lib/reminders";
 
-type Prefs = { dates: boolean; documents: boolean; trips: boolean; money: boolean; health: boolean; food: boolean; greeting: boolean; partner: boolean };
+type Prefs = { dates: boolean; documents: boolean; trips: boolean; money: boolean; health: boolean; food: boolean; greeting: boolean; partner: boolean; night: boolean };
 type State = "loading" | "unsupported" | "ios-install" | "server-off" | "blocked" | "off" | "on";
 const LABEL: Record<keyof Prefs, string> = {
-  greeting: "“Good morning” at 8:30 AM (with today's reminders)",
-  partner: "Afternoon check-in with your partner at 1:30 PM",
+  greeting: "“Good morning” at 8:30 AM (with today's reminders) ❤️",
+  partner: "Afternoon check-in with your partner at 1:30 PM ❤️",
+  night: "“Good night” at 10:30 PM ❤️",
   ...REMINDER_KIND_LABEL,
   food: "“Log dinner?” at 8:30 PM",
 };

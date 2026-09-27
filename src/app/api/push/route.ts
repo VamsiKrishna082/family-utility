@@ -11,7 +11,7 @@ const Sub = z.object({
   expirationTime: z.number().nullable().optional(),
   keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
 });
-const Prefs = z.object({ dates: z.boolean(), documents: z.boolean(), trips: z.boolean(), money: z.boolean(), health: z.boolean(), food: z.boolean(), greeting: z.boolean(), partner: z.boolean() }).partial();
+const Prefs = z.object({ dates: z.boolean(), documents: z.boolean(), trips: z.boolean(), money: z.boolean(), health: z.boolean(), food: z.boolean(), greeting: z.boolean(), partner: z.boolean(), night: z.boolean() }).partial();
 
 /** GET ?endpoint= — whether reminders are set up on the server, the public key, and this device's choices (if subscribed). */
 export async function GET(req: Request) {

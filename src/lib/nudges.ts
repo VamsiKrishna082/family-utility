@@ -1,7 +1,8 @@
 /**
- * The friendly daily notifications — pure, tested in scripts/nudges.test.mjs.
- * Messages rotate by day so they don't feel robotic, and never repeat two
- * days running.
+ * The friendly daily notifications — good morning, the afternoon check-in
+ * and good night — each signed with love from your partner. Pure, tested in
+ * scripts/nudges.test.mjs. Lines rotate by day so they don't feel robotic,
+ * and never repeat two days running.
  */
 import type { Reminder } from "@/lib/reminders";
 
@@ -31,27 +32,51 @@ const PARTNER_LINES = [
   (p: string) => `Plan one small thing to do with ${p} this evening.`,
 ];
 
+const NIGHT_LINES: Record<number, string[]> = {
+  5: ["Friday night — the weekend starts now. Sleep in tomorrow?"],
+  6: ["Saturday night — rest up for a slow Sunday."],
+  0: ["Sunday night — sleep well, a fresh week tomorrow."],
+};
+const NIGHTLY = [
+  "Sleep well — tomorrow's a new day.",
+  "Phones down, lights off. Rest well.",
+  "Thank you for today.",
+  "Sweet dreams.",
+  "Whatever today was, you did well.",
+  "Get some good sleep tonight.",
+];
+
+/** The line every daily note ends with — from the other person. */
+export const loveFrom = (partnerName: string) => `Love you ❤️ — ${partnerName}`;
+
 /** Day number since epoch (IST date) — picks today's line. */
 export function dayIndex(ymd: string): number {
   const [y, m, d] = ymd.split("-").map(Number);
   return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
 }
 const weekdayOf = (ymd: string) => new Date(`${ymd}T00:00:00Z`).getUTCDay();
+const pick = <T,>(pool: T[], date: string) => pool[dayIndex(date) % pool.length];
 
-export function morningMessage(input: { name: string; date: string; items: Reminder[] }): { title: string; body: string; url: string } {
-  const { name, date, items } = input;
+export function morningMessage(input: { name: string; partnerName?: string; date: string; items: Reminder[] }): { title: string; body: string; url: string } {
+  const { name, partnerName, date, items } = input;
   const title = `Good morning, ${name} ☀️`;
+  const love = partnerName ? `\n${loveFrom(partnerName)}` : "";
   if (items.length) {
     const lines = items.slice(0, 3).map((r) => `• ${r.title}`);
     const more = items.length > 3 ? `\n+${items.length - 3} more` : "";
-    return { title, body: `Today:\n${lines.join("\n")}${more}`, url: items.length === 1 ? items[0].url : "/" };
+    return { title, body: `Today:\n${lines.join("\n")}${more}${love}`, url: items.length === 1 ? items[0].url : "/" };
   }
   // Sunday, Monday, Friday and Saturday get their own lines; other days rotate through the everyday ones.
-  const pool = MORNING_LINES[weekdayOf(date)] ?? EVERYDAY;
-  return { title, body: pool[dayIndex(date) % pool.length], url: "/" };
+  return { title, body: `${pick(MORNING_LINES[weekdayOf(date)] ?? EVERYDAY, date)}${love}`, url: "/" };
 }
 
 export function partnerMessage(input: { partnerName: string; date: string }): { title: string; body: string; url: string } {
-  const line = PARTNER_LINES[dayIndex(input.date) % PARTNER_LINES.length];
-  return { title: `💬 ${input.partnerName}`, body: line(input.partnerName), url: "/" };
+  const line = pick(PARTNER_LINES, input.date);
+  return { title: `💬 ${input.partnerName}`, body: `${line(input.partnerName)}\n${loveFrom(input.partnerName)}`, url: "/" };
+}
+
+export function nightMessage(input: { name: string; partnerName?: string; date: string }): { title: string; body: string; url: string } {
+  const { name, partnerName, date } = input;
+  const line = pick(NIGHT_LINES[weekdayOf(date)] ?? NIGHTLY, date);
+  return { title: `Good night, ${name} 🌙`, body: `${line}${partnerName ? `\n${loveFrom(partnerName)}` : ""}`, url: "/" };
 }

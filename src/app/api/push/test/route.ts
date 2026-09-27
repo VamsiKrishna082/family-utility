@@ -4,7 +4,7 @@ import { ok, fail } from "@/lib/http";
 import { sendPush, subId, subsCol, type PushSub } from "@/lib/push";
 import { digestMessage } from "@/lib/reminders";
 import { morningMessage } from "@/lib/nudges";
-import { personById } from "@/lib/fa/people";
+import { FA_PEOPLE, personById } from "@/lib/fa/people";
 import { todayIST } from "@/lib/fa/day";
 import { loadUpcoming } from "@/lib/remindersData";
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     if (preview) {
       const items = (await loadUpcoming()).filter((r) => r.notify && sub.prefs[r.kind]);
       const d = sub.prefs.greeting
-        ? morningMessage({ name: personById(sub.person)?.name ?? "", date: todayIST(), items })
+        ? morningMessage({ name: personById(sub.person)?.name ?? "", partnerName: FA_PEOPLE.find((p) => p.id !== sub.person)?.name, date: todayIST(), items })
         : digestMessage(items);
       msg = d ? { ...d, tag: "test" } : { title: "Nothing today", body: "No reminders would go out this morning.", url: "/", tag: "test" };
     }
