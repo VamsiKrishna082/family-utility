@@ -1,5 +1,6 @@
 import { google, drive_v3 } from "googleapis";
 import { sliceFor, sliceHeaders } from "@/lib/range";
+import { driveLiteral } from "@/lib/findText";
 import { required } from "@/lib/env";
 import { TTLCache } from "@/lib/cache";
 import type { Entry, Crumb } from "@/lib/types";
@@ -339,6 +340,23 @@ export async function searchLibrary(term: string, root: string): Promise<Entry[]
     includeItemsFromAllDrives: true,
   });
   return filterToLibrary(res.data.files ?? [], root);
+}
+
+/**
+ * Ids of files whose *contents* match — Drive indexes the text inside PDFs,
+ * Office files and scanned images (its own OCR), so "search inside
+ * documents" needs no OCR service of our own. Callers map the ids back to
+ * their own records (Documents), so nothing outside the app is returned.
+ */
+export async function fullTextFileIds(term: string, max = 100): Promise<Set<string>> {
+  const res = await drive().files.list({
+    q: `fullText contains '${driveLiteral(term)}' and trashed = false and mimeType != '${FOLDER_MIME}'`,
+    pageSize: max,
+    fields: "files(id)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  return new Set((res.data.files ?? []).map((f) => f.id!).filter(Boolean));
 }
 
 /**
