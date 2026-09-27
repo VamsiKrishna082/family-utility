@@ -146,6 +146,10 @@ export type MoneyDashboardResponse = {
   monthKey: string;
   /** "In a few lines" — spend vs last month (same point in the cycle for the current month), biggest movers, savings share. */
   insights: string[];
+  /** Last month's spending to compare with — up to the same day of the cycle for the current month, the whole month otherwise. */
+  compareExpensePaise: number;
+  /** Same, per category (expense and saving categories). */
+  compareByCategory: Record<string, number>;
   isCurrentMonth: boolean;
   prevMonthKey: string;
   prevMonthLabel: string;

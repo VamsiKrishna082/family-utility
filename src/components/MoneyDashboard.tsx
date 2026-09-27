@@ -70,7 +70,7 @@ export function MoneyDashboard() {
     return Object.entries(data.summary.byCategory)
       .filter(([id, paise]) => (typeOf.get(id) === "expense" || typeOf.get(id) === "saving") && paise > 0)
       .map(([id, paise]) => {
-        const prevPaise = data.prevByCategory[id] ?? 0;
+        const prevPaise = (data.compareByCategory ?? data.prevByCategory)[id] ?? 0;
         const vsLastMonthPct = prevPaise > 0 ? Math.round(((paise - prevPaise) / prevPaise) * 100) : null;
         return { id, name: nameOf.get(id) ?? "—", spentPaise: paise, type: typeOf.get(id) as "expense" | "saving", vsLastMonthPct };
       })
@@ -96,8 +96,10 @@ export function MoneyDashboard() {
     const totalBudget = Object.values(data.budget.byGroup).reduce((s, v) => s + v, 0);
     return totalBudget > 0 ? Math.round((summary.expensePaise / totalBudget) * 100) : null;
   })();
-  const vsLastMonth = data.prevMonthExpensePaise > 0
-    ? Math.round(((summary.expensePaise - data.prevMonthExpensePaise) / data.prevMonthExpensePaise) * 100)
+  // Same point in last month for the month you're in — a half month vs a whole one always looked like "−50%".
+  const compareWith = data.compareExpensePaise ?? data.prevMonthExpensePaise;
+  const vsLastMonth = compareWith > 0
+    ? Math.round(((summary.expensePaise - compareWith) / compareWith) * 100)
     : null;
 
   return (
@@ -141,7 +143,7 @@ export function MoneyDashboard() {
           <p style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 3 }}>
             {spentPctOfBudget !== null && `${spentPctOfBudget}% of budget`}
             {spentPctOfBudget !== null && vsLastMonth !== null && " · "}
-            {vsLastMonth !== null && `${vsLastMonth >= 0 ? "+" : ""}${vsLastMonth}% vs last month`}
+            {vsLastMonth !== null && `${vsLastMonth >= 0 ? "+" : ""}${vsLastMonth}% vs ${data.isCurrentMonth ? "this point last month" : "last month"}`}
           </p>
         </Link>
         <Link href={`/money/transactions?month=${data.monthKey}&type=saving`} className="card block" style={{ padding: 18 }}>

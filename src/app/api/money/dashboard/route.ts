@@ -104,9 +104,9 @@ export async function GET(req: Request) {
       let expensePaise = 0;
       for (const d of prevTx.docs) {
         const tx = d.data() as MoneyTx;
-        if (tx.date > cutoff || tx.type !== "expense") continue;
+        if (tx.date > cutoff || (tx.type !== "expense" && tx.type !== "saving")) continue;
         byCategory[tx.categoryId] = (byCategory[tx.categoryId] ?? 0) + tx.amountPaise;
-        expensePaise += tx.amountPaise;
+        if (tx.type === "expense") expensePaise += tx.amountPaise;
       }
       prevForCompare = { expensePaise, byCategory };
     }
@@ -121,6 +121,9 @@ export async function GET(req: Request) {
     return ok({
       monthKey,
       insights,
+      // For the headline "vs last month": the same point in last month's cycle when this is the current month.
+      compareExpensePaise: prevForCompare.expensePaise,
+      compareByCategory: prevForCompare.byCategory,
       isCurrentMonth: monthKey === currentMonthKey,
       prevMonthKey: prevKey,
       prevMonthLabel: monthKeyLabel(prevKey),
