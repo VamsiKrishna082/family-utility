@@ -13,7 +13,7 @@ import { REMINDER_KINDS, type ReminderKind } from "@/lib/reminders";
 export const PUSH_KINDS = [...REMINDER_KINDS, "food"] as const;
 export type PushKind = ReminderKind | "food";
 export type PushPrefs = Record<PushKind, boolean>;
-export const DEFAULT_PREFS: PushPrefs = { dates: true, documents: true, trips: true, money: true, food: false };
+export const DEFAULT_PREFS: PushPrefs = { dates: true, documents: true, trips: true, money: true, health: true, food: false };
 
 export type PushSub = {
   id: string;

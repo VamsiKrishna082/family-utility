@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import useSWR from "swr";
-import { CalendarHeart, CreditCard, FileText, Plane, Utensils } from "lucide-react";
+import { CalendarHeart, CreditCard, FileText, HeartPulse, Plane, Utensils } from "lucide-react";
 import { daysBetween, todayIST } from "@/lib/trips/logic";
 import { kcalLeft } from "@/lib/fa/day";
 import type { Reminder } from "@/lib/reminders";
@@ -10,7 +10,7 @@ import type { FaDayResponse } from "@/lib/fa/types";
 import type { TripsResponse } from "@/lib/trips/types";
 
 const fetcher = (u: string) => fetch(u).then((r) => (r.ok ? r.json() : Promise.reject(new Error("load"))));
-const ICON = { dates: CalendarHeart, documents: FileText, trips: Plane, money: CreditCard } as const;
+const ICON = { dates: CalendarHeart, documents: FileText, trips: Plane, money: CreditCard, health: HeartPulse } as const;
 const fmt = (n: number) => Math.round(n).toLocaleString("en-IN");
 
 /**

@@ -1,8 +1,10 @@
 import { db } from "@/lib/firestore";
 import { todayIST } from "@/lib/dates/logic";
-import { upcoming, type Reminder, type ReminderCard, type ReminderDoc, type ReminderTrip } from "@/lib/reminders";
+import { upcoming, type Reminder, type ReminderBudget, type ReminderCard, type ReminderDoc, type ReminderHealth, type ReminderTrip } from "@/lib/reminders";
+import { computeMonthKey, getSettings } from "@/lib/moneyEngine";
+import { HEALTH_PEOPLE } from "@/lib/health";
 import type { DtEvent } from "@/lib/dates/types";
-import type { MoneyCard, MoneyTx } from "@/lib/types";
+import type { MoneyBudget, MoneyCard, MoneyCategory, MoneyMonthSummary, MoneyTx } from "@/lib/types";
 
 /**
  * Loads what the reminders look at — dates, documents with an expiry, trips
@@ -12,12 +14,31 @@ import type { MoneyCard, MoneyTx } from "@/lib/types";
 export async function loadUpcoming(now = new Date()): Promise<Reminder[]> {
   const today = todayIST(now);
   const todayStr = `${today.y}-${String(today.m).padStart(2, "0")}-${String(today.d).padStart(2, "0")}`;
-  const [datesSnap, docsSnap, tripsSnap, cardsSnap] = await Promise.all([
+  const settings = await getSettings();
+  const monthKey = computeMonthKey(todayStr, settings.monthStartDay);
+  const [datesSnap, docsSnap, tripsSnap, cardsSnap, monthSnap, budgetSnap, catSnap, healthSnap] = await Promise.all([
     db().collection("dates").get(),
     db().collection("doc_records").where("archived", "==", false).get(),
     db().collection("trips").get(),
     db().collection("money_cards").where("archived", "==", false).get(),
+    db().collection("money_months").doc(monthKey).get(),
+    db().collection("money_budgets").doc(monthKey).get(),
+    db().collection("money_categories").get(),
+    db().collection("health_items").get(),
   ]);
+
+  // Budgets are set per expense group; this month's spend per group comes from the month summary.
+  const expenseGroups = new Set(catSnap.docs.map((d) => d.data() as MoneyCategory).filter((c) => c.type === "expense").map((c) => c.group));
+  const spentByGroup = monthSnap.exists ? (monthSnap.data() as MoneyMonthSummary).byGroup : {};
+  const budgets: ReminderBudget[] = Object.entries(budgetSnap.exists ? (budgetSnap.data() as MoneyBudget).byGroup : {})
+    .filter(([group]) => expenseGroups.has(group))
+    .map(([group, budgetPaise]) => ({ group, monthKey, spentPaise: spentByGroup[group] ?? 0, budgetPaise }));
+
+  const nameOf = new Map<string, string>(HEALTH_PEOPLE.map((p) => [p.id, p.name]));
+  const health: ReminderHealth[] = healthSnap.docs
+    .map((d) => d.data() as ReminderHealth & { person: string })
+    .filter((h) => h.nextDate)
+    .map((h) => ({ ...h, personName: nameOf.get(h.person) ?? h.person }));
 
   const dates = datesSnap.docs.map((d) => d.data() as DtEvent);
   const docs = docsSnap.docs.map((d) => d.data() as ReminderDoc).filter((d) => d.expiryDate);
@@ -39,5 +60,5 @@ export async function loadUpcoming(now = new Date()): Promise<Reminder[]> {
     }),
   );
 
-  return upcoming({ today, dates, docs, trips, cards });
+  return upcoming({ today, dates, docs, trips, cards, budgets, health });
 }

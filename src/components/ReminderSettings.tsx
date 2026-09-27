@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bell, BellOff, Loader2, Send } from "lucide-react";
 import { REMINDER_KIND_LABEL } from "@/lib/reminders";
 
-type Prefs = { dates: boolean; documents: boolean; trips: boolean; money: boolean; food: boolean };
+type Prefs = { dates: boolean; documents: boolean; trips: boolean; money: boolean; health: boolean; food: boolean };
 type State = "loading" | "unsupported" | "ios-install" | "server-off" | "blocked" | "off" | "on";
 const LABEL: Record<keyof Prefs, string> = { ...REMINDER_KIND_LABEL, food: "“Log dinner?” at 8:30 PM" };
 
@@ -145,7 +145,7 @@ export function ReminderSettings() {
             <button className="btn btn-plain" onClick={() => test(true)} disabled={busy}>Preview this morning’s reminder</button>
           </div>
           <p style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 10 }}>
-            Birthdays follow each date’s own “remind me” days. Renewals: 30, 14, 7, 3 and 1 days before. Trips: a week, 3 days and the day before. Card dues: on the 1st and 15th.
+            Birthdays follow each date’s own “remind me” days. Renewals: 30, 14, 7, 3 and 1 days before. Trips: a week, 3 days and the day before. Card dues: on the 1st and 15th; budgets once at 80% and once at 100%. Health: a week, a day and on the day.
           </p>
         </>
       )}

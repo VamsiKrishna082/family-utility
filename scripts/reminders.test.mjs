@@ -68,3 +68,26 @@ test("digest: one message, most pressing first, capped", () => {
   const many = Array.from({ length: 6 }, (_, i) => ({ ...items[0], title: `x${i}` }));
   assert.match(digestMessage(many).body, /\+2 more$/);
 });
+
+test("budgets: from 80% listed and nudged once; 100% is its own nudge", () => {
+  const b = (spent) => ({ group: "Food", monthKey: "2026-09", spentPaise: spent, budgetPaise: 1000000 });
+  assert.equal(upcoming({ ...none, today, budgets: [b(700000)] }).length, 0);
+  const at86 = upcoming({ ...none, today, budgets: [b(860000)] })[0];
+  assert.equal(at86.title, "Food budget 86% used");
+  assert.equal(at86.detail, "₹8,600 of ₹10,000 this month");
+  assert.equal(at86.once, true);
+  const over = upcoming({ ...none, today, budgets: [b(1120000)] })[0];
+  assert.equal(over.title, "Food budget over by ₹1,200");
+  assert.notEqual(at86.key, over.key);
+});
+
+test("health: refills and check-ups a week, a day and on the day", () => {
+  const h = (id, nextDate, extra = {}) => ({ id, person: "vamsi", personName: "Vamsi", kind: "medicine", title: "Thyronorm", nextDate, ...extra });
+  const r = upcoming({ ...none, today, health: [h("a", "2026-10-05"), h("b", "2026-10-01"), h("c", "2026-09-29", { kind: "visit", title: "Dentist" }), h("d", "2026-10-02", { active: false })] });
+  const by = Object.fromEntries(r.map((x) => [x.key.split(":")[1], x]));
+  assert.equal(by.a.notify, true);
+  assert.match(by.a.title, /Vamsi: Thyronorm refill in 7 days/);
+  assert.equal(by.b.notify, false);
+  assert.equal(by.c.title, "Vamsi: Dentist check-up tomorrow");
+  assert.equal(by.d, undefined);
+});

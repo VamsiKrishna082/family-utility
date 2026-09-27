@@ -51,7 +51,15 @@ export async function POST(req: Request) {
     // Morning: one digest per device; the day's log keeps a reminder from being sent twice (e.g. a retried job).
     const logRef = db().collection("reminder_log").doc(date);
     const log = new Set<string>(((await logRef.get()).data()?.keys as string[] | undefined) ?? []);
-    const items = (await loadUpcoming()).filter((r) => r.notify && !log.has(r.key));
+    const due = (await loadUpcoming()).filter((r) => r.notify && !log.has(r.key));
+    // "Once" reminders (a budget crossing 80% / 100%) are sent a single time, not every morning after.
+    const onceKeys = due.filter((r) => r.once).map((r) => r.key);
+    const onceSeen = new Set<string>();
+    if (onceKeys.length) {
+      const snaps = await db().getAll(...onceKeys.map((k) => db().collection("reminder_once").doc(encodeURIComponent(k))));
+      snaps.forEach((s, i) => { if (s.exists) onceSeen.add(onceKeys[i]); });
+    }
+    const items = due.filter((r) => !onceSeen.has(r.key));
     let sent = 0;
     const delivered = new Set<string>();
     for (const sub of subs) {
@@ -63,7 +71,12 @@ export async function POST(req: Request) {
         mine.forEach((r) => delivered.add(r.key));
       }
     }
-    if (delivered.size) await logRef.set({ date, keys: [...log, ...delivered], updatedAt: Date.now() });
+    if (delivered.size) {
+      await logRef.set({ date, keys: [...log, ...delivered], updatedAt: Date.now() });
+      const batch = db().batch();
+      for (const r of items) if (r.once && delivered.has(r.key)) batch.set(db().collection("reminder_once").doc(encodeURIComponent(r.key)), { key: r.key, sentOn: date });
+      await batch.commit();
+    }
     return ok({ slot, devices: subs.length, reminders: items.length, sent });
   } catch (e) {
     return fail(e);

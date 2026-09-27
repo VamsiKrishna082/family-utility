@@ -7,13 +7,14 @@ import type { DtEvent } from "@/lib/dates/types";
  * scripts/reminders.test.mjs; the server loads the data (src/lib/remindersData.ts).
  */
 
-export const REMINDER_KINDS = ["dates", "documents", "trips", "money"] as const;
+export const REMINDER_KINDS = ["dates", "documents", "trips", "money", "health"] as const;
 export type ReminderKind = (typeof REMINDER_KINDS)[number];
 export const REMINDER_KIND_LABEL: Record<ReminderKind, string> = {
   dates: "Birthdays & anniversaries",
   documents: "Document renewals",
   trips: "Trips & to-dos",
-  money: "Credit card dues",
+  money: "Card dues & budget alerts",
+  health: "Check-ups, refills & doses",
 };
 
 export type Reminder = {
@@ -26,6 +27,8 @@ export type Reminder = {
   url: string;
   /** Worth a notification this morning (vs. only listed on Home). */
   notify: boolean;
+  /** Send at most once ever (by key), not once a day — e.g. "budget 80% used" for a month. */
+  once?: boolean;
 };
 
 export type ReminderDoc = { id: string; name: string; expiryDate?: string; expiryLabel?: "renew" | "expires" | "keep_till"; archived?: boolean };
@@ -35,6 +38,13 @@ export type ReminderTrip = {
   bookings: { id: string; title: string; date?: string; time?: string }[];
 };
 export type ReminderCard = { id: string; name: string; outstandingPaise: number };
+/** This month's spend vs budget for one budget group (expense groups only). */
+export type ReminderBudget = { group: string; monthKey: string; spentPaise: number; budgetPaise: number };
+/** A health item with a next date: check-up, refill, next dose. */
+export type ReminderHealth = { id: string; person: string; personName: string; kind: "visit" | "medicine" | "vaccine" | "test"; title: string; nextDate?: string; active?: boolean };
+
+const HEALTH_NOTIFY_DAYS = new Set([7, 1, 0]);
+const HEALTH_VERB: Record<ReminderHealth["kind"], string> = { visit: "check-up", medicine: "refill", vaccine: "dose", test: "test" };
 
 const DOC_NOTIFY_DAYS = new Set([30, 14, 7, 3, 1, 0]);
 const TRIP_NOTIFY_DAYS = new Set([7, 3, 1, 0]);
@@ -44,7 +54,7 @@ const rupees = (paise: number) => `₹${Math.round(paise / 100).toLocaleString("
 /** Exact for reminders: "today", "tomorrow", "in 7 days (Mon)". */
 const when = (days: number, date: Ymd) => (days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days (${weekday(date)})`);
 
-export function upcoming(input: { today: Ymd; dates: DtEvent[]; docs: ReminderDoc[]; trips: ReminderTrip[]; cards: ReminderCard[] }): Reminder[] {
+export function upcoming(input: { today: Ymd; dates: DtEvent[]; docs: ReminderDoc[]; trips: ReminderTrip[]; cards: ReminderCard[]; budgets?: ReminderBudget[]; health?: ReminderHealth[] }): Reminder[] {
   const { today } = input;
   const out: Reminder[] = [];
 
@@ -143,6 +153,45 @@ export function upcoming(input: { today: Ymd; dates: DtEvent[]; docs: ReminderDo
       daysAway: 0,
       url: "/money",
       notify: today.d === 1 || today.d === 15,
+    });
+  }
+
+  // Budgets: listed from 80% used; one nudge at 80% and one at 100% per group per month.
+  for (const b of input.budgets ?? []) {
+    if (b.budgetPaise <= 0) continue;
+    const pct = Math.round((b.spentPaise / b.budgetPaise) * 100);
+    if (pct < 80) continue;
+    const over = pct >= 100;
+    out.push({
+      kind: "money",
+      key: `budget:${b.monthKey}:${b.group}:${over ? 100 : 80}`,
+      title: over
+        ? `${b.group} budget ${pct === 100 ? "used up" : `over by ${rupees(b.spentPaise - b.budgetPaise)}`}`
+        : `${b.group} budget ${pct}% used`,
+      detail: `${rupees(b.spentPaise)} of ${rupees(b.budgetPaise)} this month`,
+      daysAway: 0,
+      url: "/money",
+      notify: true,
+      once: true,
+    });
+  }
+
+  // Health: check-ups, refills and next doses — a week before, the day before and on the day; overdue ones listed.
+  for (const h of input.health ?? []) {
+    if (!h.nextDate || h.active === false) continue;
+    const days = daysBetween(today, parseYmd(h.nextDate));
+    if (days > 30) continue;
+    const what = HEALTH_VERB[h.kind];
+    out.push({
+      kind: "health",
+      key: `health:${h.id}:${h.nextDate}:${days < 0 ? "overdue" : days}`,
+      title: days < 0
+        ? `${h.personName}: ${h.title} ${what} overdue`
+        : `${h.personName}: ${h.title} ${what} ${when(days, parseYmd(h.nextDate))}`,
+      detail: "",
+      daysAway: days,
+      url: `/health?p=${h.person}`,
+      notify: days < 0 ? isMonday : HEALTH_NOTIFY_DAYS.has(days),
     });
   }
 
