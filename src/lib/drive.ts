@@ -1,4 +1,5 @@
 import { google, drive_v3 } from "googleapis";
+import { sliceFor, sliceHeaders } from "@/lib/range";
 import { required } from "@/lib/env";
 import { TTLCache } from "@/lib/cache";
 import type { Entry, Crumb } from "@/lib/types";
@@ -440,9 +441,9 @@ export async function mimeOf(fileId: string): Promise<string> {
   return res.data.mimeType ?? "application/octet-stream";
 }
 
-export async function fileMeta(fileId: string): Promise<{ name: string; mimeType: string }> {
-  const res = await drive().files.get({ fileId, fields: "name,mimeType", supportsAllDrives: true });
-  return { name: res.data.name ?? "file", mimeType: res.data.mimeType ?? "application/octet-stream" };
+export async function fileMeta(fileId: string): Promise<{ name: string; mimeType: string; size: number }> {
+  const res = await drive().files.get({ fileId, fields: "name,mimeType,size", supportsAllDrives: true });
+  return { name: res.data.name ?? "file", mimeType: res.data.mimeType ?? "application/octet-stream", size: Number(res.data.size ?? 0) };
 }
 
 /**
@@ -482,22 +483,35 @@ export async function driveStorageQuota(): Promise<{ usedBytes: number; limitByt
  * which one calls requireUser() first.
  */
 export async function proxyDriveFile(fileId: string, range: string | null): Promise<Response> {
-  const [meta, token] = await Promise.all([fileMeta(fileId), accessToken()]);
-
-  const upstream = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
-    headers: { Authorization: `Bearer ${token}`, ...(range ? { Range: range } : {}) },
-  });
-
-  const headers = new Headers();
-  headers.set("Content-Type", meta.mimeType);
-  headers.set("Accept-Ranges", "bytes");
-  headers.set("Cache-Control", "private, max-age=3600");
+  const meta = await fileMeta(fileId);
   const disposition = meta.mimeType === "application/pdf" ? "inline" : "attachment";
-  headers.set("Content-Disposition", `${disposition}; filename="${meta.name.replace(/"/g, "")}"`);
-  for (const h of ["content-length", "content-range"]) {
-    const v = upstream.headers.get(h);
-    if (v) headers.set(h, v);
-  }
+  // A download with no Range has to be the whole file — never a slice the browser would save as if complete.
+  return sendDriveBytes(fileId, meta, range, {
+    "Content-Disposition": `${disposition}; filename="${meta.name.replace(/"/g, "")}"`,
+  }, { sliceWithoutRange: false });
+}
 
-  return new Response(upstream.body, { status: upstream.status, headers });
+/**
+ * Sends a Drive file's bytes, never more than MAX_SLICE per ranged response
+ * (Cloud Run rejects responses over 32 MiB). Players and PDF viewers ask for
+ * the next slice themselves via Range.
+ */
+export async function sendDriveBytes(
+  fileId: string,
+  meta: { mimeType: string; size: number },
+  range: string | null,
+  extra: Record<string, string>,
+  opts: { sliceWithoutRange: boolean },
+): Promise<Response> {
+  const slice = range || opts.sliceWithoutRange ? sliceFor(range, meta.size) : { start: 0, end: meta.size - 1, partial: false };
+  if (!slice) {
+    return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${meta.size}`, "Accept-Ranges": "bytes" } });
+  }
+  const upstream = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
+    headers: { Authorization: `Bearer ${await accessToken()}`, ...(slice.partial ? { Range: `bytes=${slice.start}-${slice.end}` } : {}) },
+  });
+  if (!upstream.ok) return new Response(upstream.body, { status: upstream.status });
+
+  const headers = new Headers({ "Content-Type": meta.mimeType, "Cache-Control": "private, max-age=3600", ...extra, ...sliceHeaders(slice, meta.size) });
+  return new Response(upstream.body, { status: slice.partial ? 206 : 200, headers });
 }

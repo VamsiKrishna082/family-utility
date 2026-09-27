@@ -183,7 +183,10 @@ export type TripExpense = {
 
 /** refunds: Money income entries linked to the trip (cancellations, refunds) — they bring the net cost down. */
 export type TripExpensesResponse = { items: TripExpense[]; refunds: TripExpense[] };
-export type TripCandidatesResponse = { items: (TripExpense & { otherTripId?: string })[]; month: string; category: string };
+export type TripCandidatesResponse = { items: (TripExpense & { otherTripId?: string })[]; month: string };
+/** One of Money's months (monthKey) with the expenses in it that aren't on this trip yet. */
+export type TripCandidateMonth = { monthKey: string; count: number; totalPaise: number };
+export type TripCandidateMonthsResponse = { months: TripCandidateMonth[] };
 
 export type WeatherDay = { date: string; code: number; max: number; min: number; rainPct: number };
 export type TripWeatherResponse = { place: string | null; days: WeatherDay[]; note?: string };
