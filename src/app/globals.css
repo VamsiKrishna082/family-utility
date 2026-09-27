@@ -138,3 +138,7 @@ a.card:active { transform: scale(.985); }
 .fa .fa-input:focus { border-color: var(--fa-ink); }
 .fa .fa-bar { height: 8px; border-radius: 999px; background: var(--fa-track); overflow: hidden; }
 .fa .fa-bar > div { height: 100%; border-radius: 999px; transition: width .3s ease; }
+
+/* Leaflet: at fractional browser zoom or print scaling, 256px tiles land on
+   half-pixels and show hairline seams — overlap them by half a pixel. */
+.leaflet-container .leaflet-tile { width: 256.5px !important; height: 256.5px !important; mix-blend-mode: normal !important; }
