@@ -15,7 +15,7 @@ function TripCard({ t, today }: { t: TripSummary; today: string }) {
   const status = tripStatus(t.startDate, t.endDate, today);
   return (
     <Link href={`/trips/${t.id}`} className="card block" style={{ padding: 10 }}>
-      <Cover photoId={t.coverPhotoId} height={150} radius={12}>
+      <Cover trip={t} height={150} radius={12}>
         <span style={{ position: "absolute", top: 10, left: 10 }}><StatusPill status={status} /></span>
       </Cover>
       <div style={{ padding: "12px 6px 4px" }}>

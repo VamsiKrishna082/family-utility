@@ -107,6 +107,8 @@ export type Trip = {
   budgetPlan: Partial<Record<BudgetKey, number>>;
   notes: string;
   coverPhotoId?: string;
+  /** Your own cover image (uploaded, stored in GCS) — shown instead of coverPhotoId when set. */
+  coverImage?: { key: string; updatedAt: number };
   albumFolderId?: string;
   /** Foreign trips: shared costs can be entered in this currency and converted at `rate` rupees per unit. */
   currency?: string;

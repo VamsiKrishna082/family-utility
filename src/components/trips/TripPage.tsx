@@ -12,6 +12,7 @@ import { ShareSheet } from "@/components/trips/ShareSheet";
 import { TripForm } from "@/components/trips/TripForm";
 import { useTrip } from "@/components/trips/useTrip";
 import { Cover, Modal, send, StatusPill } from "@/components/trips/shared";
+import { CoverPicker } from "@/components/trips/CoverPicker";
 
 type Tab = "plan" | "journey" | "expenses";
 
@@ -29,6 +30,8 @@ export function TripPage({ id }: { id: string }) {
 
   const { trip, days, hiddenDays } = data;
   const status = tripStatus(trip.startDate, trip.endDate, today);
+  const hasCover = Boolean(trip.coverImage || trip.coverPhotoId);
+  const onCoverChanged = () => { mutate(); };
   // Open where it's useful: planning before the trip, the journal during/after.
   const active: Tab = tab ?? (status === "ongoing" || status === "completed" ? "journey" : "plan");
 
@@ -50,9 +53,10 @@ export function TripPage({ id }: { id: string }) {
         </div>
       </div>
 
-      <Cover photoId={trip.coverPhotoId} height={220} radius={18}>
-        <div style={{ position: "absolute", inset: 0, background: trip.coverPhotoId ? "linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0) 60%)" : "none" }} />
-        <div style={{ position: "absolute", left: 20, right: 20, bottom: 18, color: trip.coverPhotoId ? "#fff" : "var(--ink)" }}>
+      <Cover trip={trip} height={220} radius={18}>
+        <CoverPicker trip={trip} onChanged={onCoverChanged} />
+        <div style={{ position: "absolute", inset: 0, background: hasCover ? "linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0) 60%)" : "none" }} />
+        <div style={{ position: "absolute", left: 20, right: 20, bottom: 18, color: hasCover ? "#fff" : "var(--ink)" }}>
           <div className="flex items-center gap-2 mb-1"><StatusPill status={status} /><span style={{ fontSize: 13, fontWeight: 700 }}>{tripWhen(trip.startDate, trip.endDate, trip.days, today)}</span></div>
           <h1 className="display" style={{ fontSize: 32, lineHeight: 1.1 }}>{trip.name}</h1>
           <p className="flex flex-wrap items-center" style={{ gap: 10, fontSize: 13.5, marginTop: 4, opacity: 0.9 }}>
@@ -62,7 +66,7 @@ export function TripPage({ id }: { id: string }) {
           </p>
         </div>
       </Cover>
-      {!trip.coverPhotoId && <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>Tip: on the Journey tab, tap the ☆ on any day photo to make it the cover.</p>}
+      {!hasCover && <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>Tip: use “Cover” to upload your own image, or tap the ☆ on any day photo on the Journey tab.</p>}
       {trip.notes && <p className="card mt-4" style={{ padding: 14, fontSize: 14, whiteSpace: "pre-wrap" }}>{trip.notes}</p>}
 
       <div className="flex my-5" style={{ gap: 4, padding: 4, borderRadius: 12, background: "var(--card)", border: "1px solid var(--line)", width: "fit-content" }} role="tablist">

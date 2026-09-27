@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { personForEmail } from "@/lib/fa/people";
 import { db } from "@/lib/firestore";
+import { gcsDelete } from "@/lib/gcs";
 import { ok, fail } from "@/lib/http";
 import { dayHasContent, endDateOf } from "@/lib/trips/logic";
 import { daysCol, emptyDay, getTrip, HttpError, readDay, TripFields, tripsCol } from "@/lib/trips/store";
@@ -62,7 +63,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     for (const k of ["startDate", "budgetRupees", "coverPhotoId", "currency", "rate"] as const) {
       if (patch[k] === null) update[k] = FieldValue.delete();
     }
+    // Picking a day photo as the cover replaces your own uploaded cover image.
+    const dropCustom = typeof patch.coverPhotoId === "string" && trip.coverImage;
+    if (dropCustom) update.coverImage = FieldValue.delete();
     await tripsCol().doc(id).update(update);
+    if (dropCustom) await gcsDelete(trip.coverImage!.key).catch(() => undefined);
     return ok({ id });
   } catch (e) {
     return fail(e);

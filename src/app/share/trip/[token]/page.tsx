@@ -25,8 +25,10 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
     return { day: d, photos: [...favs, ...all.filter((p) => !d.favourites?.includes(p.id))] };
   }));
   const wrap = wrapUp(days, Object.fromEntries(withPhotos.map((w) => [w.day.day, w.photos.length])));
-  const cover = trip.coverPhotoId ?? withPhotos.find((w) => w.photos.length)?.photos[0]?.id;
   const photo = (id: string, w = 520) => `/share/trip/${token}/photo/${id}?w=${w}`;
+  // Your own uploaded cover first, then the ☆ day photo, then the trip's first photo.
+  const coverPhoto = trip.coverPhotoId ?? withPhotos.find((w) => w.photos.length)?.photos[0]?.id;
+  const coverUrl = trip.coverImage ? `/share/trip/${token}/cover?v=${trip.coverImage.updatedAt}` : coverPhoto ? photo(coverPhoto, 1600) : null;
 
   return (
     <main className="share-trip" style={{ maxWidth: 860, margin: "0 auto", padding: "32px 20px 60px" }}>
@@ -34,13 +36,20 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
         @media print {
           .no-print { display: none !important; }
           .share-trip { padding: 0 !important; }
-          .share-day { break-inside: avoid-page; }
           body { background: #fff !important; }
+          .share-cover { height: 9cm !important; }
+          .share-day { break-before: page; border-top: none !important; margin-top: 0 !important; }
+          .share-day:first-of-type { break-before: auto; }
+          .share-day-text { break-inside: avoid; }
+          .share-photos { grid-template-columns: repeat(4, 1fr) !important; gap: 6px !important; }
+          .share-photos a { break-inside: avoid; }
+          .share-photos img { border-radius: 6px !important; }
         }
+        @page { margin: 14mm; }
       `}</style>
-      {cover && (
+      {coverUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photo(cover, 1600)} alt="" style={{ width: "100%", height: 320, objectFit: "cover", borderRadius: 18, marginBottom: 24 }} />
+        <img className="share-cover" src={coverUrl} alt="" style={{ width: "100%", height: 320, objectFit: "cover", borderRadius: 18, marginBottom: 24 }} />
       )}
       <div className="flex items-start justify-between" style={{ gap: 16 }}>
         <div>
@@ -62,6 +71,7 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
 
       {withPhotos.filter(({ day, photos }) => photos.length || day.title || day.story || day.places.length || day.highlight || day.food?.length).map(({ day, photos }) => (
         <section key={day.day} className="share-day" style={{ marginTop: 36, paddingTop: 24, borderTop: "1px solid var(--line)" }}>
+          <div className="share-day-text">
           <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", color: "var(--faint)" }}>
             Day {day.day}{trip.startDate ? ` · ${dayLabel(dateOfDay(trip.startDate, day.day))}` : ""}
             {day.mood ? ` · ${day.mood}` : ""}{day.rating ? ` · ${"★".repeat(day.rating)}` : ""}
@@ -83,9 +93,10 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
               <Utensils size={14} /> {(day.food ?? []).map((f) => `${f.name}${f.dish ? ` (${f.dish})` : ""}`).join(" · ")}
             </p>
           )}
+          </div>
           {photos.length > 0 && (
-            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", marginTop: 16 }}>
-              {photos.slice(0, 24).map((p) => (
+            <div className="share-photos" style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", marginTop: 16 }}>
+              {photos.map((p) => (
                 <a key={p.id} href={photo(p.id, 1600)} target="_blank" rel="noreferrer">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={photo(p.id)} alt={p.name} loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 10, background: "var(--line2)" }} />
@@ -93,7 +104,6 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
               ))}
             </div>
           )}
-          {photos.length > 24 && <p style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 8 }}>+{photos.length - 24} more photos</p>}
         </section>
       ))}
       <p className="no-print" style={{ marginTop: 48, fontSize: 12, color: "var(--faint)", textAlign: "center" }}>Shared privately from our family app.</p>

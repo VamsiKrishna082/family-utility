@@ -33,7 +33,7 @@ export function TripMemories() {
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
         {memories.map(({ t, years }) => (
           <Link key={t.id} href={`/trips/${t.id}`} className="card block" style={{ padding: 8 }}>
-            <Cover photoId={t.coverPhotoId} height={120} radius={10} />
+            <Cover trip={t} height={120} radius={10} />
             <div style={{ padding: "10px 6px 4px" }}>
               <p className="display truncate" style={{ fontSize: 17 }}>{t.name}</p>
               <p className="flex items-center truncate" style={{ gap: 5, fontSize: 12.5, color: "var(--faint)", marginTop: 2 }}>

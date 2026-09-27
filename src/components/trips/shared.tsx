@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Plane } from "lucide-react";
-import type { TripStatus } from "@/lib/trips/types";
+import type { Trip, TripStatus } from "@/lib/trips/types";
 
 export { Chip, inputStyle, labelStyle, Modal } from "@/components/dates/shared";
 
@@ -46,12 +46,22 @@ export function StatusPill({ status }: { status: TripStatus }) {
 }
 
 /** Cover image for a trip card / header: the chosen Album photo, else a soft gradient with a plane. */
-export function Cover({ photoId, height, radius = 14, children }: { photoId?: string; height: number; radius?: number; children?: ReactNode }) {
+type CoverOf = Pick<Trip, "id" | "coverPhotoId" | "coverImage">;
+
+/** The trip's cover: your own uploaded image first, else the day photo picked with ☆. */
+export function coverSrc(t: CoverOf): string | null {
+  if (t.coverImage) return `/api/trips/${t.id}/cover?v=${t.coverImage.updatedAt}`;
+  if (t.coverPhotoId) return `/api/thumb/${t.coverPhotoId}?w=1600`;
+  return null;
+}
+
+export function Cover({ trip, height, radius = 14, children }: { trip: CoverOf; height: number; radius?: number; children?: ReactNode }) {
+  const src = coverSrc(trip);
   return (
     <div style={{ position: "relative", height, borderRadius: radius, overflow: "hidden", background: "linear-gradient(135deg, #e5efee 0%, #f2ece2 100%)" }}>
-      {photoId ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={`/api/thumb/${photoId}?w=1600`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
         <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0 }}>
           <Plane size={height / 4} color="#2f6e6b" strokeWidth={1.4} opacity={0.35} />

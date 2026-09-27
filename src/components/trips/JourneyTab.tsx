@@ -54,6 +54,7 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
     if (last && last.part === part) last.items.push({ m, i });
     else groups.push({ part, items: [{ m, i }] });
   });
+  const [showAll, setShowAll] = useState<Set<number>>(new Set());
   const toggleFav = (id: string) => {
     if (favs.includes(id)) onFavourites(favs.filter((x) => x !== id));
     else if (favs.length < 4) onFavourites([...favs, id]);
@@ -67,7 +68,7 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
             {g.part} · {timeOf(g.items[0].m.createdTime)}{g.items.length > 1 ? ` – ${timeOf(g.items[g.items.length - 1].m.createdTime)}` : ""}
           </p>
           <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))" }}>
-            {g.items.slice(0, 12).map(({ m, i }) => {
+            {(showAll.has(gi) ? g.items : g.items.slice(0, 12)).map(({ m, i }) => {
               const fav = favs.includes(m.id);
               return (
                 <div key={m.id} className="group" style={{ position: "relative" }}>
@@ -89,7 +90,11 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
               );
             })}
           </div>
-          {g.items.length > 12 && <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 4 }}>+{g.items.length - 12} more in the {g.part.toLowerCase()}</p>}
+          {g.items.length > 12 && (
+            <button onClick={() => setShowAll((cur) => { const n = new Set(cur); if (n.has(gi)) n.delete(gi); else n.add(gi); return n; })} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--indigo)", marginTop: 4 }}>
+              {showAll.has(gi) ? "Show fewer" : `Show all ${g.items.length} from the ${g.part.toLowerCase()}`}
+            </button>
+          )}
         </div>
       ))}
       <p className="flex items-center justify-between" style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 6 }}>
