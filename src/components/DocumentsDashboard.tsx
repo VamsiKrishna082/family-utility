@@ -6,6 +6,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { ChevronLeft, ChevronRight, Search, Plus, FileText, Download, Share2, Clock, Folder, FolderPlus, Upload, Pencil, Trash2, Paperclip } from "lucide-react";
 import { AddDocumentForm } from "@/components/AddDocumentForm";
 import { UploadManyForm } from "@/components/UploadManyForm";
+import { FolderShareSheet } from "@/components/FolderShareSheet";
 import { descendants, folderChain, folderPath } from "@/lib/docFolders";
 import type { DocCategoriesResponse, DocCategory, DocExpiryLabel, DocFoldersResponse, DocOwner, DocRecord, DocRecordsResponse, DriveQuota } from "@/lib/types";
 
@@ -74,6 +75,7 @@ export function DocumentsDashboard() {
   const [uploadingMany, setUploadingMany] = useState(false);
   const [folderId, setFolderId] = useState<string | null>(null);
   const [folderForm, setFolderForm] = useState<{ mode: "new" | "rename"; name: string } | null>(null);
+  const [sharingFolder, setSharingFolder] = useState(false);
   const [folderBusy, setFolderBusy] = useState(false);
   const [folderError, setFolderError] = useState("");
 
@@ -284,6 +286,9 @@ export function DocumentsDashboard() {
               </button>
               {currentFolder && (
                 <>
+                  <button className="btn btn-plain flex items-center gap-1" style={{ fontSize: 12.5, padding: "6px 10px" }} aria-label="Share this folder" onClick={() => setSharingFolder(true)}>
+                    <Share2 size={14} /> Share folder
+                  </button>
                   <button className="btn btn-plain flex items-center" style={{ padding: "6px 9px" }} aria-label="Rename folder" onClick={() => { setFolderError(""); setFolderForm({ mode: "rename", name: currentFolder.name }); }}>
                     <Pencil size={14} />
                   </button>
@@ -403,6 +408,9 @@ export function DocumentsDashboard() {
           onSaved={() => { mutateRecs(); globalMutate("/api/docs/quota"); }}
           onCreateCategory={createCategory}
         />
+      )}
+      {sharingFolder && currentFolder && (
+        <FolderShareSheet folderId={currentFolder.id} folderName={currentFolder.name} onClose={() => setSharingFolder(false)} />
       )}
       {uploadingMany && (
         <UploadManyForm

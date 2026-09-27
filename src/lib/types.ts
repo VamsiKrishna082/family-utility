@@ -460,4 +460,15 @@ export type DocShare = {
 };
 export type DocSharesResponse = { items: DocShare[] };
 
+/** A time-limited, read-only link to a whole Documents folder (and its sub-folders). */
+export type DocFolderShare = {
+  token: string;
+  folderId: string;
+  folderName: string;
+  createdBy: string;
+  createdAt: number;
+  expiresAt: number;
+  revoked: boolean;
+};
+
 export type DriveQuota = { usedBytes: number; limitBytes: number | null };
