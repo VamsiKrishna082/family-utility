@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, Check, FileText, Link2, MessageCircle, Paperclip, Plus, Search, Sparkles, Trash2, Undo2, X } from "lucide-react";
+import { ArrowRight, Check, FileText, Link2, MessageCircle, Paperclip, Plus, Search, Sparkles, Trash2, Undo2, Unlink, X } from "lucide-react";
 import { budgetBucket, dateOfDay, dayLabel, daysBetween, headCount, phaseOf, settleUp, todayIST, upiLink, type Phase } from "@/lib/trips/logic";
 import {
   BUDGET_KEYS, BUDGET_LABEL,
@@ -41,7 +41,7 @@ const rowStyle = { borderTop: "1px solid var(--line2)", padding: "11px 4px", wid
  * pick one of Money's months → pick a category in it → tick expenses.
  * Ticks are kept while you go back and pick another month or category.
  */
-function LinkExisting({ trip, onClose, onDone }: { trip: Trip; onClose: () => void; onDone: () => void }) {
+function LinkExisting({ trip, onClose, onDone }: { trip: Trip; onClose: () => void; onDone: (linkedIds: string[], totalPaise: number) => void }) {
   const [month, setMonth] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const { data: monthsData } = useSWR<TripCandidateMonthsResponse>(`/api/trips/${trip.id}/candidates`, fetcher);
@@ -80,7 +80,7 @@ function LinkExisting({ trip, onClose, onDone }: { trip: Trip; onClose: () => vo
     setBusy(true);
     try {
       await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: [...picked.keys()], link: true });
-      onDone();
+      onDone([...picked.keys()], total);
       onClose();
     } finally {
       setBusy(false);
@@ -308,15 +308,47 @@ export function ExpensesTab({ trip, saveTrip, onTripChanged }: { trip: Trip; sav
   const hasPlan = BUDGET_KEYS.some((k) => trip.budgetPlan[k]);
   const receiptsFor = (txId?: string, sharedId?: string) => trip.receipts.filter((r) => (txId && r.txId === txId) || (sharedId && r.sharedId === sharedId));
 
-  const unlink = async (id: string) => {
-    await mutate({ items: items.filter((e) => e.id !== id), refunds }, false);
-    await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: [id], link: false });
-    refetchAll();
+  // Linking and unlinking only set/clear the trip tag on Money entries, so
+  // every change can be undone from the bar that appears after it.
+  const [undo, setUndo] = useState<{ ids: string[]; linked: boolean; text: string } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offerUndo = (u: { ids: string[]; linked: boolean; text: string }) => {
+    setUndo(u);
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndo(null), 15000);
   };
+  const countText = (ids: string[], paise: number) => `${ids.length} expense${ids.length === 1 ? "" : "s"} · ${paiseToRupees(paise)}`;
+
+  const unlinkMany = async (ids: string[]) => {
+    if (!ids.length) return;
+    const gone = new Set(ids);
+    const paise = items.filter((e) => gone.has(e.id)).reduce((s, e) => s + e.amountPaise, 0);
+    await mutate({ items: items.filter((e) => !gone.has(e.id)), refunds }, false);
+    await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: ids, link: false });
+    refetchAll();
+    offerUndo({ ids, linked: false, text: `Unlinked ${countText(ids, paise)} — still in Money` });
+  };
+  const unlink = (id: string) => unlinkMany([id]);
   const linkSuggested = async (ids: string[]) => {
+    const paise = (sugg?.items ?? []).filter((s) => ids.includes(s.id)).reduce((s, e) => s + e.amountPaise, 0);
     await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: ids, link: true });
     refetchAll();
+    offerUndo({ ids, linked: true, text: `Linked ${countText(ids, paise)}` });
   };
+  const undoLast = async () => {
+    if (!undo) return;
+    const u = undo;
+    setUndo(null);
+    await send(`/api/trips/${trip.id}/expenses`, "POST", { txIds: u.ids, link: !u.linked });
+    refetchAll();
+  };
+
+  // select several to unlink at once
+  const [selecting, setSelecting] = useState(false);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) => setSel((cur) => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const selPaise = items.filter((e) => sel.has(e.id)).reduce((s, e) => s + e.amountPaise, 0);
+  const stopSelecting = () => { setSelecting(false); setSel(new Set()); };
 
   const pickReceipt = (target: { txId?: string; sharedId?: string }) => { uploadFor.current = target; fileRef.current?.click(); };
   const onReceipt = async (file: File | undefined) => {
@@ -346,7 +378,8 @@ export function ExpensesTab({ trip, saveTrip, onTripChanged }: { trip: Trip; sav
   );
 
   const Row = ({ e }: { e: TripExpense }) => (
-    <div className="flex items-center gap-3 py-2 group" style={{ borderTop: "1px solid var(--line2)" }}>
+    <div className="flex items-center gap-3 py-2 group" style={{ borderTop: "1px solid var(--line2)", cursor: selecting ? "pointer" : undefined }} onClick={selecting ? () => toggleSel(e.id) : undefined}>
+      {selecting && <input type="checkbox" checked={sel.has(e.id)} onChange={() => toggleSel(e.id)} onClick={(ev) => ev.stopPropagation()} style={{ width: 17, height: 17, flexShrink: 0 }} aria-label={`Select ${e.note || e.categoryName}`} />}
       <span style={{ width: 84, fontSize: 12.5, color: "var(--faint)", flexShrink: 0 }}>{dayLabel(e.date)}</span>
       <span className="flex-1 min-w-0">
         <span className="block truncate" style={{ fontSize: 14 }}>{[e.categoryName, e.subcategory].filter(Boolean).join(" · ")}</span>
@@ -354,10 +387,14 @@ export function ExpensesTab({ trip, saveTrip, onTripChanged }: { trip: Trip; sav
       </span>
       <ReceiptChips list={receiptsFor(e.id)} />
       <span style={{ fontSize: 14, fontWeight: 600 }}>{paiseToRupees(e.amountPaise)}</span>
-      <button onClick={() => pickReceipt({ txId: e.id })} className={receiptsFor(e.id).length ? "" : "opacity-0 group-hover:opacity-100"} title="Attach a receipt" aria-label="Attach a receipt">
-        {uploading === e.id ? <span style={{ fontSize: 11 }}>…</span> : <Paperclip size={14} color="var(--faint)" />}
-      </button>
-      <button onClick={() => unlink(e.id)} className="opacity-0 group-hover:opacity-100" title="Unlink from this trip (stays in Money)" aria-label="Unlink from trip"><X size={14} color="var(--faint)" /></button>
+      {!selecting && (
+        <>
+          <button onClick={() => pickReceipt({ txId: e.id })} className={receiptsFor(e.id).length ? "" : "opacity-0 group-hover:opacity-100"} title="Attach a receipt" aria-label="Attach a receipt">
+            {uploading === e.id ? <span style={{ fontSize: 11 }}>…</span> : <Paperclip size={14} color="var(--faint)" />}
+          </button>
+          <button onClick={() => unlink(e.id)} title="Unlink from this trip (stays in Money)" aria-label="Unlink from trip" style={{ padding: 4 }}><Unlink size={14} color="var(--faint)" /></button>
+        </>
+      )}
     </div>
   );
 
@@ -412,6 +449,13 @@ export function ExpensesTab({ trip, saveTrip, onTripChanged }: { trip: Trip; sav
         <button className="btn btn-plain flex items-center gap-1.5" onClick={() => pickReceipt({})}><Paperclip size={15} /> {uploading === "general" ? "Uploading…" : "Upload a receipt"}</button>
       </div>
       {notice && <p style={{ fontSize: 13, color: "var(--red)", marginBottom: 12 }}>{notice}</p>}
+      {undo && (
+        <div role="status" className="flex items-center gap-3" style={{ position: "fixed", left: "50%", bottom: 24, transform: "translateX(-50%)", zIndex: 60, background: "var(--ink)", color: "#fff", borderRadius: 12, padding: "10px 12px 10px 16px", fontSize: 13.5, boxShadow: "0 8px 24px rgba(0,0,0,.18)", maxWidth: "calc(100vw - 32px)" }}>
+          <span className="min-w-0">{undo.text}</span>
+          <button onClick={undoLast} style={{ fontWeight: 700, color: "#fff", textDecoration: "underline", flexShrink: 0 }}>Undo</button>
+          <button onClick={() => setUndo(null)} aria-label="Dismiss" style={{ flexShrink: 0 }}><X size={14} color="#fff" /></button>
+        </div>
+      )}
 
       {sugg && sugg.items.length > 0 && (
         <div className="card mb-5" style={{ padding: 14, borderColor: BAR }}>
@@ -436,6 +480,23 @@ export function ExpensesTab({ trip, saveTrip, onTripChanged }: { trip: Trip; sav
           {!data && <p style={{ color: "var(--faint)", fontSize: 14 }}>Loading…</p>}
           {data && items.length === 0 && (
             <p className="card" style={{ padding: 16, fontSize: 13.5, color: "var(--dim)" }}>No expenses yet. Add them here, pick this trip when adding an expense in Money, or link ones you&apos;ve already logged — from any month.</p>
+          )}
+
+          {items.length > 0 && (
+            <div className="flex items-center justify-end mb-2" style={{ gap: 8 }}>
+              {selecting ? (
+                <>
+                  <span style={{ fontSize: 13, color: "var(--dim)", marginRight: "auto" }}>{sel.size ? `${sel.size} selected · ${paiseToRupees(selPaise)}` : "Tap expenses to select"}</span>
+                  <button className="btn btn-plain" style={smallBtn} onClick={() => setSel(sel.size === items.length ? new Set() : new Set(items.map((e) => e.id)))}>{sel.size === items.length ? "Clear" : "Select all"}</button>
+                  <button className="btn btn-plain" style={smallBtn} onClick={stopSelecting}>Cancel</button>
+                  <button className="btn btn-dark flex items-center gap-1" style={smallBtn} disabled={!sel.size} onClick={async () => { const ids = [...sel]; stopSelecting(); await unlinkMany(ids); }}>
+                    <Unlink size={13} /> Unlink{sel.size ? ` ${sel.size}` : ""}
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-plain flex items-center gap-1" style={smallBtn} onClick={() => setSelecting(true)}><Unlink size={13} /> Unlink several</button>
+              )}
+            </div>
           )}
 
           {perDay.some((d) => d.value > 0) && (
@@ -603,7 +664,7 @@ export function ExpensesTab({ trip, saveTrip, onTripChanged }: { trip: Trip; sav
       {adding && cats && (
         <MoneyQuickAdd categories={cats.items} initialTripId={trip.id} initialDate={trip.startDate && trip.endDate && today >= trip.startDate && today <= trip.endDate ? today : undefined} onClose={() => setAdding(false)} onSaved={refetchAll} />
       )}
-      {linking && cats && <LinkExisting trip={trip} onClose={() => setLinking(false)} onDone={refetchAll} />}
+      {linking && cats && <LinkExisting trip={trip} onClose={() => setLinking(false)} onDone={(ids, paise) => { refetchAll(); offerUndo({ ids, linked: true, text: `Linked ${countText(ids, paise)}` }); }} />}
       {refunding && refundCategory && (
         <FieldForm
           title="Add a refund or cancellation"
