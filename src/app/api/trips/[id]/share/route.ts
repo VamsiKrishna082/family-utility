@@ -9,7 +9,9 @@ export const runtime = "nodejs";
 
 const Expiry = z.object({ days: z.union([z.literal(1), z.literal(7), z.literal(30), z.null()]).optional() });
 const expiryFields = (days: 1 | 7 | 30 | null | undefined) =>
-  days ? { shareExpiresAt: Date.now() + days * 86_400_000 } : { shareExpiresAt: FieldValue.delete() };
+  days
+    ? { shareExpiresAt: Date.now() + days * 86_400_000, shareDays: days }
+    : { shareExpiresAt: FieldValue.delete(), shareDays: FieldValue.delete() };
 
 /**
  * POST { days? } — turn on (or replace) the private read-only journal link:
@@ -52,7 +54,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   try {
     await requireUser();
     const { id } = await ctx.params;
-    await tripsCol().doc(id).update({ shareToken: FieldValue.delete(), shareExpiresAt: FieldValue.delete(), updatedAt: Date.now() });
+    await tripsCol().doc(id).update({ shareToken: FieldValue.delete(), shareExpiresAt: FieldValue.delete(), shareDays: FieldValue.delete(), updatedAt: Date.now() });
     return ok({ shared: false });
   } catch (e) {
     return fail(e);

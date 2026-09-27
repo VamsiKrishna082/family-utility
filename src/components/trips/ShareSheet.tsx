@@ -10,14 +10,22 @@ export function ShareSheet({ trip, onClose, onChanged }: { trip: Trip; onClose: 
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  // What's selected: the choice just tapped (shown at once), else what's saved on the trip.
+  const [picked, setPicked] = useState<1 | 7 | 30 | null | undefined>(undefined);
+  const current = picked !== undefined ? picked : trip.shareDays ?? null;
   useEffect(() => setOrigin(window.location.origin), []);
   const url = trip.shareToken && origin ? `${origin}/share/trip/${trip.shareToken}` : "";
 
   const act = async (method: "POST" | "DELETE" | "PATCH", days?: 1 | 7 | 30 | null) => {
+    const before = picked;
+    if (method === "PATCH") setPicked(days ?? null);
+    if (method === "DELETE") setPicked(undefined);
     setBusy(true);
     try {
       await send(`/api/trips/${trip.id}/share`, method, method === "DELETE" ? undefined : { days: days ?? null });
       onChanged();
+    } catch {
+      setPicked(before); // didn't save — show what's really set
     } finally {
       setBusy(false);
     }
@@ -40,13 +48,13 @@ export function ShareSheet({ trip, onClose, onChanged }: { trip: Trip; onClose: 
             <div className="flex flex-wrap" style={{ gap: 8 }}>
               <a className="btn btn-dark flex items-center gap-1.5" href={url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open</a>
               <a className="btn btn-plain flex items-center gap-1.5" href={`https://wa.me/?text=${encodeURIComponent(`${trip.name} — our trip journal: ${url}`)}`} target="_blank" rel="noreferrer">Send on WhatsApp</a>
-              <button className="btn btn-plain" disabled={busy} onClick={() => act("POST")}>New link</button>
+              <button className="btn btn-plain" disabled={busy} onClick={() => act("POST", current)}>New link</button>
               <button className="btn btn-plain" disabled={busy} onClick={() => act("DELETE")} style={{ color: "var(--red)" }}>Stop sharing</button>
             </div>
             <div className="flex flex-wrap items-center" style={{ gap: 6 }}>
               <span style={{ fontSize: 12.5, color: "var(--dim)", marginRight: 2 }}>Link works:</span>
               {([[null, "Until I stop it"], [1, "24 hours"], [7, "7 days"], [30, "30 days"]] as const).map(([d, label]) => {
-                const on = d === null ? !trip.shareExpiresAt : false;
+                const on = d === current;
                 return <Chip key={label} on={on} onClick={() => act("PATCH", d)}>{label}</Chip>;
               })}
             </div>

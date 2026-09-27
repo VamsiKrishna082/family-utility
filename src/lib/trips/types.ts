@@ -113,6 +113,8 @@ export type Trip = {
   coverArt?: "auto" | "beach" | "mountains" | "desert" | "city";
   /** When the share link stops working (ms); absent = until sharing is turned off. */
   shareExpiresAt?: number;
+  /** The length chosen for the share link (1, 7 or 30 days); absent = until turned off. Drives which option shows as selected. */
+  shareDays?: 1 | 7 | 30;
   albumFolderId?: string;
   /** Foreign trips: shared costs can be entered in this currency and converted at `rate` rupees per unit. */
   currency?: string;
