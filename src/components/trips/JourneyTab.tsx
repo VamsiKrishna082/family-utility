@@ -44,6 +44,8 @@ function Stars({ value, onChange, size = 16 }: { value?: number; onChange?: (n: 
 function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; coverId?: string; onCover: (id: string) => void; onFavourites: (ids: string[]) => void }) {
   const { data } = useSWR<BrowseResponse>(day.folderId ? `/api/browse?folder=${day.folderId}` : null, fetcher);
   const [open, setOpen] = useState<number | null>(null);
+  // Hooks must all run before the early returns below (loading / no folder / empty).
+  const [showAll, setShowAll] = useState<Set<number>>(new Set());
   const media = (data?.entries ?? []).filter((e): e is Entry => e.kind !== "folder").sort((a, b) => a.createdTime.localeCompare(b.createdTime));
   const favs = day.favourites ?? [];
   if (!day.folderId) return null;
@@ -63,7 +65,6 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
     if (last && last.part === part) last.items.push({ m, i });
     else groups.push({ part, items: [{ m, i }] });
   });
-  const [showAll, setShowAll] = useState<Set<number>>(new Set());
   const toggleFav = (id: string) => {
     if (favs.includes(id)) onFavourites(favs.filter((x) => x !== id));
     else if (favs.length < 4) onFavourites([...favs, id]);
