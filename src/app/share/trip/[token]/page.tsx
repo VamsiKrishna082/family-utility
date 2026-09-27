@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MapPin, Star, Utensils } from "lucide-react";
-import { dateOfDay, dayLabel, journalPoints, journalTitle, rangeLabel, wrapUp } from "@/lib/trips/logic";
+import { dateOfDay, dayLabel, journalPhotoList, journalPoints, journalTitle, rangeLabel, wrapUp } from "@/lib/trips/logic";
 import { dayPhotos, sharedDays, tripByShareToken } from "@/lib/trips/shared";
 import { PrintButton } from "@/components/trips/PrintButton";
 import { PlacesMap } from "@/components/trips/TripMap";
@@ -28,12 +28,9 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
   const trip = await tripByShareToken(token);
   if (!trip) notFound();
   const days = await sharedDays(trip);
-  // Each day's ♥ favourites first, then the rest in the order they were taken.
-  const withPhotos = await Promise.all(days.map(async (d) => {
-    const all = await dayPhotos(d);
-    const favs = (d.favourites ?? []).map((id) => all.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
-    return { day: d, photos: [...favs, ...all.filter((p) => !d.favourites?.includes(p.id))] };
-  }));
+  // Each day's ♥ favourites first, then the photos chosen for the journal
+  // (or all of them if none were chosen), in the order they were taken.
+  const withPhotos = await Promise.all(days.map(async (d) => ({ day: d, photos: journalPhotoList(await dayPhotos(d), d.favourites, d.journalPhotos) })));
   const wrap = wrapUp(days, Object.fromEntries(withPhotos.map((w) => [w.day.day, w.photos.length])));
   const photo = (id: string, w = 520) => `/share/trip/${token}/photo/${id}?w=${w}`;
   // Your own uploaded cover, else the ☆ day photo, else the illustrated art if you picked it,

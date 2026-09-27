@@ -156,6 +156,8 @@ export type TripDay = {
   food?: FoodNote[];
   /** Up to 4 favourite photo ids — shown first on the shared journal. */
   favourites?: string[];
+  /** Photos chosen for the shared / printed journal (favourites are always in). Absent = every photo. */
+  journalPhotos?: string[];
   voice?: VoiceNote[];
   updatedAt: number;
   updatedBy: string;

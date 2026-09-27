@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { artTheme, artTitle, seeded } from "../src/lib/trips/art.ts";
-import { budgetBucket, directionsLink, journalPoints, journalTitle, docProblem, gapAfter, headCount, matchFolders, timelineClashes, upiLink, wrapUp, safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
+import { budgetBucket, directionsLink, journalPhotoList, journalPoints, journalTitle, likelyDuplicates, docProblem, gapAfter, headCount, matchFolders, timelineClashes, upiLink, wrapUp, safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
 
 test("days ↔ end date", () => {
   assert.equal(endDateOf("2026-12-30", 5), "2027-01-03");
@@ -149,4 +149,18 @@ test("cover art: seeded variety is stable per place", () => {
   assert.ok(xs.every((x) => x >= 0 && x < 1));
   assert.equal(artTitle("  ", "Honeymoon"), "Honeymoon");
   assert.equal(artTitle("Munnar", "x"), "Munnar");
+});
+
+test("journal photos: favourites first, then the chosen ones (or all)", () => {
+  const all = ["a", "b", "c", "d"].map((id) => ({ id }));
+  assert.deepEqual(journalPhotoList(all, ["c"], undefined).map((p) => p.id), ["c", "a", "b", "d"]);
+  assert.deepEqual(journalPhotoList(all, ["c"], ["b", "d"]).map((p) => p.id), ["c", "b", "d"]);
+  assert.deepEqual(journalPhotoList(all, [], []).map((p) => p.id), []);
+  assert.deepEqual(journalPhotoList(all, ["zz"], ["a"]).map((p) => p.id), ["a"]);
+});
+
+test("likely duplicates: bursts and repeat uploads keep the first", () => {
+  const p = (id, t) => ({ id, createdTime: `2026-08-07T10:00:${t}Z` });
+  const dup = likelyDuplicates([p("a", "00"), p("b", "01"), p("c", "02"), p("d", "10"), p("e", "10"), p("f", "30")]);
+  assert.deepEqual([...dup].sort(), ["b", "c", "e"]);
 });

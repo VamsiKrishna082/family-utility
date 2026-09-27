@@ -274,3 +274,32 @@ export function journalTitle(name: string, startDate?: string): string {
   const hasYear = /\b(19|20)\d{2}\b/.test(clean);
   return `${clean} – trip journal${when && !hasYear ? ` (${when})` : ""}`;
 }
+
+/**
+ * The photos a day shows in the shared / printed journal: ♥ favourites
+ * first (always included), then the photos you chose for the journal — or
+ * every photo when you haven't chosen (null/undefined). Camera-roll order.
+ */
+export function journalPhotoList<T extends { id: string }>(all: T[], favourites: string[] | undefined, chosen: string[] | null | undefined): T[] {
+  const favs = (favourites ?? []).map((id) => all.find((p) => p.id === id)).filter((p): p is T => Boolean(p));
+  const favIds = new Set(favs.map((p) => p.id));
+  const pick = chosen ? new Set(chosen) : null;
+  return [...favs, ...all.filter((p) => !favIds.has(p.id) && (!pick || pick.has(p.id)))];
+}
+
+/**
+ * Likely duplicates to leave out of the journal: burst shots and repeat
+ * uploads — a photo taken within `gapSec` seconds of the last one kept
+ * (capture time from the camera). The first of each run is kept.
+ */
+export function likelyDuplicates(photos: { id: string; createdTime: string }[], gapSec = 2): Set<string> {
+  const sorted = [...photos].sort((a, b) => a.createdTime.localeCompare(b.createdTime));
+  const dup = new Set<string>();
+  let lastKept: number | null = null;
+  for (const p of sorted) {
+    const t = Date.parse(p.createdTime);
+    if (lastKept !== null && Number.isFinite(t) && Math.abs(t - lastKept) <= gapSec * 1000) dup.add(p.id);
+    else lastKept = Number.isFinite(t) ? t : lastKept;
+  }
+  return dup;
+}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { Check, ChevronDown, ChevronUp, FolderOpen, FolderSearch, Heart, ImageIcon, MapPin, Plus, Star, Trophy, Utensils, X } from "lucide-react";
-import { dateOfDay, dayLabel, daysBetween, mapsLink, partOfDay, todayIST, tripStatus } from "@/lib/trips/logic";
+import { dateOfDay, dayLabel, daysBetween, likelyDuplicates, mapsLink, partOfDay, todayIST, tripStatus } from "@/lib/trips/logic";
 import type { FolderSuggestion, FoodNote, Trip, TripDay, TripExpensesResponse, TripWrapUp } from "@/lib/trips/types";
 import type { BrowseResponse, Entry } from "@/lib/types";
 import { Lightbox } from "@/components/Lightbox";
@@ -40,12 +40,22 @@ function Stars({ value, onChange, size = 16 }: { value?: number; onChange?: (n: 
   );
 }
 
-/** A day's photos, grouped morning → night by capture time, with ♥ favourites (max 4) and ☆ trip cover. */
-function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; coverId?: string; onCover: (id: string) => void; onFavourites: (ids: string[]) => void }) {
+/**
+ * A day's photos, grouped morning → night by capture time, with ♥ favourites
+ * (max 4), ☆ trip cover, and "Choose for journal" — pick which photos go in
+ * the shared / printed journal (the Album often has bursts and repeats).
+ */
+function DayPhotos({ day, coverId, onCover, onFavourites, onJournal }: {
+  day: TripDay; coverId?: string; onCover: (id: string) => void; onFavourites: (ids: string[]) => void;
+  onJournal: (ids: string[] | null) => Promise<void> | void;
+}) {
   const { data } = useSWR<BrowseResponse>(day.folderId ? `/api/browse?folder=${day.folderId}` : null, fetcher);
   const [open, setOpen] = useState<number | null>(null);
   // Hooks must all run before the early returns below (loading / no folder / empty).
   const [showAll, setShowAll] = useState<Set<number>>(new Set());
+  /** null = not choosing; otherwise the photos ticked for the journal. */
+  const [picking, setPicking] = useState<Set<string> | null>(null);
+  const [savingPick, setSavingPick] = useState(false);
   const media = (data?.entries ?? []).filter((e): e is Entry => e.kind !== "folder").sort((a, b) => a.createdTime.localeCompare(b.createdTime));
   const favs = day.favourites ?? [];
   if (!day.folderId) return null;
@@ -70,21 +80,85 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
     else if (favs.length < 4) onFavourites([...favs, id]);
   };
 
+  // Journal choice — photos only (videos never print); ♥ favourites are always in.
+  const photos = media.filter((m) => m.kind === "photo");
+  const chosen = day.journalPhotos ? new Set(day.journalPhotos) : null;
+  const inJournal = (id: string) => favs.includes(id) || !chosen || chosen.has(id);
+  const journalCount = photos.filter((m) => inJournal(m.id)).length;
+  const startPicking = () => setPicking(new Set(photos.filter((m) => inJournal(m.id)).map((m) => m.id)));
+  const togglePick = (id: string) => setPicking((cur) => {
+    if (!cur || favs.includes(id)) return cur;
+    const n = new Set(cur);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const dups = likelyDuplicates(photos);
+  const skipDuplicates = () => setPicking((cur) => new Set([...(cur ?? [])].filter((id) => favs.includes(id) || !dups.has(id))));
+  const savePick = async () => {
+    if (!picking) return;
+    setSavingPick(true);
+    try {
+      const all = photos.every((m) => picking.has(m.id) || favs.includes(m.id));
+      await onJournal(all ? null : photos.filter((m) => picking.has(m.id) && !favs.includes(m.id)).map((m) => m.id));
+      setPicking(null);
+    } finally {
+      setSavingPick(false);
+    }
+  };
+  const pickedCount = picking ? photos.filter((m) => picking.has(m.id) || favs.includes(m.id)).length : 0;
+
   return (
     <>
+      {picking ? (
+        <div className="card mb-3" style={{ padding: "10px 12px", position: "sticky", top: 8, zIndex: 5, borderColor: "var(--ink)" }}>
+          <p style={{ fontSize: 13.5, fontWeight: 700 }}>Choose photos for the journal</p>
+          <p style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 2 }}>
+            {pickedCount} of {photos.length} chosen{favs.length ? " · ♥ favourites always go in" : ""} · tap a photo to add or remove it
+          </p>
+          <div className="flex flex-wrap items-center" style={{ gap: 6, marginTop: 8 }}>
+            <button className="btn btn-plain" style={smallBtn} onClick={() => setPicking(new Set(photos.map((m) => m.id)))}>Select all</button>
+            <button className="btn btn-plain" style={smallBtn} onClick={() => setPicking(new Set(favs))}>Clear</button>
+            {dups.size > 0 && (
+              <button className="btn btn-plain" style={smallBtn} onClick={skipDuplicates} title="Leaves out burst shots and repeat uploads — photos taken within 2 seconds of the one before">
+                Skip near-duplicates ({dups.size})
+              </button>
+            )}
+            <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              <button className="btn btn-plain" style={smallBtn} onClick={() => setPicking(null)} disabled={savingPick}>Cancel</button>
+              <button className="btn btn-dark" style={smallBtn} onClick={savePick} disabled={savingPick}>{savingPick ? "Saving…" : "Save"}</button>
+            </span>
+          </div>
+        </div>
+      ) : null}
       {groups.map((g, gi) => (
         <div key={`${g.part}-${gi}`} className="mb-2">
           <p style={{ fontSize: 12, color: "var(--faint)", marginBottom: 4 }}>
             {g.part} · {timeOf(g.items[0].m.createdTime)}{g.items.length > 1 ? ` – ${timeOf(g.items[g.items.length - 1].m.createdTime)}` : ""}
           </p>
           <div style={{ display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))" }}>
-            {(showAll.has(gi) ? g.items : g.items.slice(0, 12)).map(({ m, i }) => {
+            {(picking || showAll.has(gi) ? g.items : g.items.slice(0, 12)).map(({ m, i }) => {
               const fav = favs.includes(m.id);
+              if (picking) {
+                const on = m.kind === "photo" && (fav || picking.has(m.id));
+                return (
+                  <button key={m.id} onClick={() => togglePick(m.id)} disabled={m.kind !== "photo" || fav} aria-pressed={on}
+                    aria-label={`${on ? "Remove" : "Add"} ${m.name} ${on ? "from" : "to"} the journal`}
+                    style={{ position: "relative", display: "block", width: "100%", cursor: m.kind !== "photo" || fav ? "default" : "pointer" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/thumb/${m.id}?w=520`} alt="" loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, background: "var(--line2)", opacity: on ? 1 : 0.35, outline: on ? "2px solid var(--ink)" : "none", outlineOffset: 1 }} />
+                    <span style={{ position: "absolute", top: 5, right: 5, width: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: on ? "var(--ink)" : "rgba(255,255,255,.85)", border: on ? "none" : "1.5px solid rgba(0,0,0,.35)" }}>
+                      {fav ? <Heart size={11} color="#fff" fill="#fff" /> : on ? <Check size={13} color="#fff" /> : null}
+                    </span>
+                    {m.kind !== "photo" && <span style={{ position: "absolute", left: 5, bottom: 5, fontSize: 10.5, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,.55)", padding: "1px 6px", borderRadius: 6 }}>video</span>}
+                    {m.kind === "photo" && !fav && dups.has(m.id) && <span style={{ position: "absolute", left: 5, bottom: 5, fontSize: 10.5, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,.55)", padding: "1px 6px", borderRadius: 6 }}>similar</span>}
+                  </button>
+                );
+              }
               return (
                 <div key={m.id} className="group" style={{ position: "relative" }}>
                   <button onClick={() => setOpen(i)} style={{ display: "block", width: "100%" }} aria-label={`Open ${m.name}`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/thumb/${m.id}?w=520`} alt="" loading="lazy" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, background: "var(--line2)", outline: fav ? "2px solid #b4533d" : "none", outlineOffset: 1 }} />
+                    <img src={`/api/thumb/${m.id}?w=520`} alt="" loading="lazy" title={m.kind === "photo" && !inJournal(m.id) ? "Not in the journal" : undefined} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8, background: "var(--line2)", outline: fav ? "2px solid #b4533d" : "none", outlineOffset: 1, opacity: m.kind === "photo" && !inJournal(m.id) ? 0.4 : 1 }} />
                   </button>
                   {m.kind === "photo" && (
                     <span style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 4 }}>
@@ -100,7 +174,7 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
               );
             })}
           </div>
-          {g.items.length > 12 && (
+          {!picking && g.items.length > 12 && (
             <button onClick={() => setShowAll((cur) => { const n = new Set(cur); if (n.has(gi)) n.delete(gi); else n.add(gi); return n; })} style={{ fontSize: 12.5, fontWeight: 600, color: "var(--indigo)", marginTop: 4 }}>
               {showAll.has(gi) ? "Show fewer" : `Show all ${g.items.length} from the ${g.part.toLowerCase()}`}
             </button>
@@ -111,6 +185,13 @@ function DayPhotos({ day, coverId, onCover, onFavourites }: { day: TripDay; cove
         <span>{media.length} photo{media.length === 1 ? "" : "s"} · ♥ {favs.length}/4 favourites</span>
         <Link href={`/album?folder=${day.folderId}`} style={{ color: "var(--indigo)", fontWeight: 600 }}>Open in Album</Link>
       </p>
+      {!picking && photos.length > 0 && (
+        <p className="flex flex-wrap items-center" style={{ gap: 8, fontSize: 12.5, color: "var(--dim)", marginTop: 4 }}>
+          <span>Journal &amp; print: {chosen ? <b>{journalCount} of {photos.length} photos</b> : <>all {photos.length} photos</>}</span>
+          <button onClick={startPicking} style={{ fontWeight: 600, color: "var(--indigo)" }}>{chosen ? "Change" : "Choose for journal"}</button>
+          {chosen && <button onClick={() => onJournal(null)} style={{ fontWeight: 600, color: "var(--indigo)" }}>Use all</button>}
+        </p>
+      )}
       {open !== null && <Lightbox items={media} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </>
   );
@@ -268,7 +349,7 @@ function DayCard({ trip, day, open, onToggle, onSaved, onCover }: { trip: Trip; 
               </span>
             </div>
             {day.folderId ? (
-              <DayPhotos day={day} coverId={trip.coverPhotoId} onCover={onCover} onFavourites={(ids) => put({ favourites: ids }, "Favourites saved")} />
+              <DayPhotos day={day} coverId={trip.coverPhotoId} onCover={onCover} onFavourites={(ids) => put({ favourites: ids }, "Favourites saved")} onJournal={(ids) => put({ journalPhotos: ids }, ids ? "Journal photos saved" : "Journal uses all photos")} />
             ) : (
               <p style={{ fontSize: 13, color: "var(--faint)" }}>Link the Album folder with this day&apos;s photos — or use “Find photo folders” above.</p>
             )}
