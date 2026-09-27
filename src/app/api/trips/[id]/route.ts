@@ -87,7 +87,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     daysSnap.docs.forEach((d) => batch.delete(d.ref));
     txSnap.docs.forEach((d) => batch.update(d.ref, { tripId: FieldValue.delete() }));
     batch.delete(tripsCol().doc(id));
+    const cover = (await tripsCol().doc(id).get()).data()?.coverImage?.key as string | undefined;
     await batch.commit();
+    if (cover) await gcsDelete(cover).catch(() => undefined);
     return ok({ id });
   } catch (e) {
     return fail(e);
