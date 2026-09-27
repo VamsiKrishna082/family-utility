@@ -4,14 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { Check, ChevronLeft, FileText, Pencil, Pill, Plus, Stethoscope, Syringe, TestTube, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, FileText, Pencil, Pill, Plus, Stethoscope, Syringe, TestTube, Trash2, UserPlus } from "lucide-react";
 import { Chip, inputStyle, labelStyle, Modal } from "@/components/dates/shared";
 import {
   BLOOD_GROUPS, HEALTH_KIND_LABEL, HEALTH_KINDS, HEALTH_NEXT_LABEL, HEALTH_PEOPLE, comingUp, markDone,
-  type HealthItem, type HealthKind, type HealthProfile,
+  type HealthItem, type HealthKind, type HealthPerson, type HealthProfile,
 } from "@/lib/health";
 
-type Resp = { person: (typeof HEALTH_PEOPLE)[number]; profile: HealthProfile; items: HealthItem[]; docs: { id: string; name: string; updatedAt: number; expiryDate: string | null }[] };
+type Resp = { person: HealthPerson; people: HealthPerson[]; profile: HealthProfile; items: HealthItem[]; docs: { id: string; name: string; updatedAt: number; expiryDate: string | null }[] };
 
 const fetcher = (u: string) => fetch(u).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "Could not load"); return j; });
 async function send(url: string, method: string, body?: unknown) {
@@ -41,8 +41,10 @@ function daysLabel(next: string, today: string): { text: string; urgent: boolean
 export function HealthPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const p = HEALTH_PEOPLE.some((x) => x.id === params.get("p")) ? params.get("p")! : "vamsi";
-  const { data, error, mutate } = useSWR<Resp>(`/api/health?p=${p}`, fetcher);
+  const p = params.get("p") || "vamsi";
+  const { data, error, mutate } = useSWR<Resp>(`/api/health?p=${encodeURIComponent(p)}`, fetcher);
+  const people = data?.people ?? HEALTH_PEOPLE;
+  const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<{ item?: HealthItem; kind: HealthKind } | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const today = todayIST();
@@ -75,12 +77,15 @@ export function HealthPage() {
         <Link href="/" className="flex items-center justify-center card" style={{ width: 38, height: 38, borderRadius: 12 }} aria-label="Home"><ChevronLeft size={19} /></Link>
         <h1 className="display" style={{ fontSize: 30 }}>Health</h1>
         <div className="flex" style={{ gap: 4, padding: 4, borderRadius: 12, background: "var(--card)", border: "1px solid var(--line)", marginLeft: "auto" }} role="tablist">
-          {HEALTH_PEOPLE.map((x) => (
-            <button key={x.id} role="tab" aria-selected={x.id === p} onClick={() => router.replace(`/health?p=${x.id}`)}
-              style={{ padding: "7px 14px", borderRadius: 9, fontSize: 13.5, fontWeight: 600, background: x.id === p ? "var(--ink)" : "transparent", color: x.id === p ? "#fff" : "var(--ink)" }}>
+          {people.map((x) => (
+            <button key={x.id} role="tab" aria-selected={x.id === (data?.person.id ?? p)} onClick={() => router.replace(`/health?p=${x.id}`)}
+              style={{ padding: "7px 14px", borderRadius: 9, fontSize: 13.5, fontWeight: 600, background: x.id === (data?.person.id ?? p) ? "var(--ink)" : "transparent", color: x.id === (data?.person.id ?? p) ? "#fff" : "var(--ink)" }}>
               {x.name}
             </button>
           ))}
+          <button onClick={() => setAdding(true)} aria-label="Add a family member" title="Add a family member (Amma, Appa…)" style={{ padding: "7px 10px", borderRadius: 9, color: "var(--faint)" }}>
+            <UserPlus size={16} />
+          </button>
         </div>
       </div>
 
@@ -119,13 +124,25 @@ export function HealthPage() {
           <div style={{ display: "grid", gap: 16 }}>
             <section className="card" style={{ padding: 18 }}>
               <div className="flex items-center justify-between mb-2">
-                <p className="display" style={{ fontSize: 18 }}>{data.person.name}</p>
+                <p className="display" style={{ fontSize: 18 }}>{data.person.name}{data.person.relation ? <span style={{ fontSize: 13, color: "var(--faint)" }}> · {data.person.relation}</span> : null}</p>
                 <button onClick={() => setEditingProfile(true)} className="flex items-center gap-1" style={{ fontSize: 12.5, color: "var(--faint)" }}><Pencil size={12} /> Edit</button>
               </div>
               <Info label="Blood group" value={data.profile.bloodGroup ?? "—"} strong />
               <Info label="Allergies" value={data.profile.allergies.length ? data.profile.allergies.join(", ") : "None noted"} />
               <Info label="Conditions" value={data.profile.conditions.length ? data.profile.conditions.join(", ") : "None noted"} />
               {data.profile.notes && <p style={{ fontSize: 13, color: "var(--dim)", marginTop: 8, whiteSpace: "pre-wrap" }}>{data.profile.notes}</p>}
+              {data.person.custom && (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Remove ${data.person.name} from Health?`)) return;
+                    try { await send(`/api/health/people/${data.person.id}`, "DELETE"); router.replace("/health?p=vamsi"); }
+                    catch (e) { window.alert(e instanceof Error ? e.message : "Couldn't remove"); }
+                  }}
+                  className="flex items-center gap-1" style={{ fontSize: 12, color: "var(--red)", marginTop: 10 }}
+                >
+                  <Trash2 size={12} /> Remove {data.person.name}
+                </button>
+              )}
             </section>
             <section className="card" style={{ padding: 18 }}>
               <p className="display" style={{ fontSize: 18, marginBottom: 6 }}>Medical documents</p>
@@ -143,6 +160,7 @@ export function HealthPage() {
       )}
 
       {form && data && <ItemForm person={data.person.id} kind={form.kind} item={form.item} onClose={() => setForm(null)} onSaved={() => { setForm(null); mutate(); }} />}
+      {adding && <AddPerson onClose={() => setAdding(false)} onAdded={(id) => { setAdding(false); router.replace(`/health?p=${id}`); }} />}
       {editingProfile && data && <ProfileForm profile={data.profile} onClose={() => setEditingProfile(false)} onSaved={() => { setEditingProfile(false); mutate(); }} />}
     </div>
   );
@@ -270,6 +288,36 @@ function ProfileForm({ profile, onClose, onSaved }: { profile: HealthProfile; on
         <div><label style={labelStyle} htmlFor="h-cond">Conditions (comma separated)</label><input id="h-cond" style={inputStyle} placeholder="e.g. Hypothyroid" value={conditions} onChange={(e) => setConditions(e.target.value)} /></div>
         <div><label style={labelStyle} htmlFor="h-pnotes">Notes</label><textarea id="h-pnotes" rows={3} style={{ ...inputStyle, resize: "vertical" }} placeholder="Doctor's number, insurance card no., anything useful in a hurry" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         <button className="btn btn-dark" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AddPerson({ onClose, onAdded }: { onClose: () => void; onAdded: (id: string) => void }) {
+  const [name, setName] = useState("");
+  const [relation, setRelation] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const save = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const { person } = await send("/api/health/people", "POST", { name: name.trim(), relation: relation.trim() || undefined });
+      onAdded(person.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't add");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title="Add a family member" onClose={onClose}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <div><label style={labelStyle} htmlFor="hp-name">Name</label><input id="hp-name" autoFocus style={inputStyle} placeholder="e.g. Amma" value={name} onChange={(e) => setName(e.target.value)} /></div>
+        <div><label style={labelStyle} htmlFor="hp-rel">Relation (optional)</label><input id="hp-rel" style={inputStyle} placeholder="e.g. Vamsi's mother" value={relation} onChange={(e) => setRelation(e.target.value)} /></div>
+        <p style={{ fontSize: 12, color: "var(--faint)" }}>They get their own medicines, visits, tests, vaccines and reminders. Their prescriptions and reports in Documents (owner “Parents”) show on their page when the file name mentions them, e.g. “Amma – thyroid report”.</p>
+        {err && <p style={{ fontSize: 13, color: "var(--red)" }}>{err}</p>}
+        <button className="btn btn-dark" disabled={!name.trim() || busy} onClick={save}>{busy ? "Adding…" : "Add"}</button>
       </div>
     </Modal>
   );

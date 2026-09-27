@@ -3,12 +3,14 @@
  * People line up with Documents' owners, so each person's Medical documents
  * show on their page.
  */
-export const HEALTH_PEOPLE = [
+export type HealthPerson = { id: string; name: string; docOwner: "yours" | "hers" | "parents" | "common"; relation?: string; custom?: boolean };
+
+/** The two of you are always here; family members (Amma, Appa, …) are added on the page and stored in health_people. */
+export const HEALTH_PEOPLE: HealthPerson[] = [
   { id: "vamsi", name: "Vamsi", docOwner: "yours" },
   { id: "varshini", name: "Varshini", docOwner: "hers" },
-  { id: "parents", name: "Parents", docOwner: "parents" },
-] as const;
-export type HealthPersonId = (typeof HEALTH_PEOPLE)[number]["id"];
+];
+export type HealthPersonId = string;
 
 export const HEALTH_KINDS = ["visit", "medicine", "test", "vaccine"] as const;
 export type HealthKind = (typeof HEALTH_KINDS)[number];

@@ -2,12 +2,13 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
-import { BLOOD_GROUPS, HEALTH_PEOPLE, type HealthProfile } from "@/lib/health";
+import { BLOOD_GROUPS, type HealthProfile } from "@/lib/health";
+import { healthPerson } from "@/lib/healthPeople";
 
 export const runtime = "nodejs";
 
 const Body = z.object({
-  person: z.enum(HEALTH_PEOPLE.map((p) => p.id) as [string, ...string[]]),
+  person: z.string().regex(/^[a-z0-9-]{2,40}$/),
   bloodGroup: z.enum(BLOOD_GROUPS).nullable().optional(),
   allergies: z.array(z.string().trim().min(1).max(60)).max(30),
   conditions: z.array(z.string().trim().min(1).max(80)).max(30),
@@ -19,6 +20,7 @@ export async function PUT(req: Request) {
   try {
     await requireUser();
     const b = Body.parse(await req.json());
+    if (!(await healthPerson(b.person))) throw new Error("Unknown person");
     const profile = {
       person: b.person,
       allergies: b.allergies,

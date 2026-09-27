@@ -2,7 +2,7 @@ import { db } from "@/lib/firestore";
 import { todayIST } from "@/lib/dates/logic";
 import { upcoming, type Reminder, type ReminderBudget, type ReminderCard, type ReminderDoc, type ReminderHealth, type ReminderTrip } from "@/lib/reminders";
 import { computeMonthKey, getSettings } from "@/lib/moneyEngine";
-import { HEALTH_PEOPLE } from "@/lib/health";
+import { healthPeople } from "@/lib/healthPeople";
 import type { DtEvent } from "@/lib/dates/types";
 import type { MoneyBudget, MoneyCard, MoneyCategory, MoneyMonthSummary, MoneyTx } from "@/lib/types";
 
@@ -34,7 +34,7 @@ export async function loadUpcoming(now = new Date()): Promise<Reminder[]> {
     .filter(([group]) => expenseGroups.has(group))
     .map(([group, budgetPaise]) => ({ group, monthKey, spentPaise: spentByGroup[group] ?? 0, budgetPaise }));
 
-  const nameOf = new Map<string, string>(HEALTH_PEOPLE.map((p) => [p.id, p.name]));
+  const nameOf = new Map<string, string>((await healthPeople()).map((p) => [p.id, p.name]));
   const health: ReminderHealth[] = healthSnap.docs
     .map((d) => d.data() as ReminderHealth & { person: string })
     .filter((h) => h.nextDate)
