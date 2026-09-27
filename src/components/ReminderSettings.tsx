@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { Bell, BellOff, Loader2, Send } from "lucide-react";
 import { REMINDER_KIND_LABEL } from "@/lib/reminders";
 
-type Prefs = { dates: boolean; documents: boolean; trips: boolean; money: boolean; health: boolean; food: boolean };
+type Prefs = { dates: boolean; documents: boolean; trips: boolean; money: boolean; health: boolean; food: boolean; greeting: boolean; partner: boolean };
 type State = "loading" | "unsupported" | "ios-install" | "server-off" | "blocked" | "off" | "on";
-const LABEL: Record<keyof Prefs, string> = { ...REMINDER_KIND_LABEL, food: "“Log dinner?” at 8:30 PM" };
+const LABEL: Record<keyof Prefs, string> = {
+  greeting: "“Good morning” at 8:30 AM (with today's reminders)",
+  partner: "Afternoon check-in with your partner at 1:30 PM",
+  ...REMINDER_KIND_LABEL,
+  food: "“Log dinner?” at 8:30 PM",
+};
 
 function b64ToBytes(b64: string): Uint8Array {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -115,7 +120,7 @@ export function ReminderSettings() {
     "ios-install": "On iPhone, reminders work once the app is installed: tap Share → “Add to Home Screen”, open it from there, and come back here.",
     "server-off": "Reminders aren't switched on for the app yet (the server needs its push keys).",
     blocked: "Notifications are blocked for this site. Allow them in the browser's site settings, then reload.",
-    off: "Get a short note at 8 AM when a birthday, a renewal, a trip or a card bill is coming up — on this device.",
+    off: "A good-morning note at 8:30 with anything coming up (birthdays, renewals, trips, bills, check-ups), an afternoon nudge to check in with each other, and more — on this device.",
   };
 
   return (
@@ -142,7 +147,7 @@ export function ReminderSettings() {
           </div>
           <div className="flex flex-wrap" style={{ gap: 8, marginTop: 12 }}>
             <button className="btn btn-plain flex items-center gap-1.5" onClick={() => test(false)} disabled={busy}><Send size={14} /> Send a test</button>
-            <button className="btn btn-plain" onClick={() => test(true)} disabled={busy}>Preview this morning’s reminder</button>
+            <button className="btn btn-plain" onClick={() => test(true)} disabled={busy}>Preview this morning’s note</button>
           </div>
           <p style={{ fontSize: 12.5, color: "var(--faint)", marginTop: 10 }}>
             Birthdays follow each date’s own “remind me” days. Renewals: 30, 14, 7, 3 and 1 days before. Trips: a week, 3 days and the day before. Card dues: on the 1st and 15th; budgets once at 80% and once at 100%. Health: a week, a day and on the day.

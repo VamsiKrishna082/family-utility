@@ -3,6 +3,9 @@ import { requireUser } from "@/lib/auth";
 import { ok, fail } from "@/lib/http";
 import { sendPush, subId, subsCol, type PushSub } from "@/lib/push";
 import { digestMessage } from "@/lib/reminders";
+import { morningMessage } from "@/lib/nudges";
+import { personById } from "@/lib/fa/people";
+import { todayIST } from "@/lib/fa/day";
 import { loadUpcoming } from "@/lib/remindersData";
 
 export const runtime = "nodejs";
@@ -19,10 +22,12 @@ export async function POST(req: Request) {
     const snap = await subsCol().doc(subId(endpoint)).get();
     if (!snap.exists) throw new Error("Reminders aren't on for this device");
     const sub = snap.data() as PushSub;
-    let msg = { title: "Reminders are on", body: "You'll get a short note at 8 AM when something's coming up.", url: "/settings", tag: "test" };
+    let msg = { title: "Reminders are on", body: "You'll get a good-morning note at 8:30 with anything coming up.", url: "/settings", tag: "test" };
     if (preview) {
       const items = (await loadUpcoming()).filter((r) => r.notify && sub.prefs[r.kind]);
-      const d = digestMessage(items);
+      const d = sub.prefs.greeting
+        ? morningMessage({ name: personById(sub.person)?.name ?? "", date: todayIST(), items })
+        : digestMessage(items);
       msg = d ? { ...d, tag: "test" } : { title: "Nothing today", body: "No reminders would go out this morning.", url: "/", tag: "test" };
     }
     const sent = await sendPush(sub, msg);

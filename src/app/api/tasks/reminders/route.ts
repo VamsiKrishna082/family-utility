@@ -4,18 +4,21 @@ import { ok, fail } from "@/lib/http";
 import { todayIST } from "@/lib/fa/day";
 import { sendPush, subsCol, type PushSub } from "@/lib/push";
 import { digestMessage } from "@/lib/reminders";
+import { morningMessage, partnerMessage } from "@/lib/nudges";
+import { FA_PEOPLE, personById } from "@/lib/fa/people";
 import { loadUpcoming } from "@/lib/remindersData";
 import type { FaEntry, FaProfile } from "@/lib/fa/types";
 
 export const runtime = "nodejs";
 
 /**
- * POST /api/tasks/reminders?slot=morning|evening — called by Cloud Scheduler
- * (8:00 and 20:30 IST) with the x-cron-secret header. Not behind the session
- * (middleware skips /api/tasks); the shared secret is the gate.
- *   morning: each device gets one short digest of what's due, per its own
- *            choices; a reminder already sent today isn't sent again.
- *   evening: "Log dinner?" to a person who has nudges on and hasn't logged it.
+ * POST /api/tasks/reminders?slot=morning|afternoon|evening — called by Cloud
+ * Scheduler (8:30, 13:30 and 20:30 IST) with the x-cron-secret header. Not
+ * behind the session (middleware skips /api/tasks); the secret is the gate.
+ *   morning:   "Good morning, <name>" with what's due today (or just the
+ *              digest if the greeting is off); nothing is sent twice a day.
+ *   afternoon: a nudge to check in with your partner (the other person).
+ *   evening:   "Log dinner?" to a person who hasn't logged it.
  */
 function authorised(req: Request): boolean {
   const want = process.env.CRON_SECRET;
@@ -32,6 +35,23 @@ export async function POST(req: Request) {
     const date = todayIST();
     const subs = (await subsCol().get()).docs.map((d) => d.data() as PushSub);
     if (!subs.length) return ok({ slot, devices: 0, sent: 0 });
+
+    if (slot === "afternoon") {
+      const sentKey = `partner-${date}`;
+      const logRef = db().collection("reminder_log").doc(date);
+      const log = new Set<string>(((await logRef.get()).data()?.keys as string[] | undefined) ?? []);
+      let sent = 0;
+      for (const sub of subs.filter((s) => s.prefs.partner !== false && !log.has(`${sentKey}:${s.id}`))) {
+        const partner = FA_PEOPLE.find((p) => p.id !== sub.person);
+        if (!partner) continue;
+        if (await sendPush(sub, { ...partnerMessage({ partnerName: partner.name, date }), tag: sentKey })) {
+          sent++;
+          log.add(`${sentKey}:${sub.id}`);
+        }
+      }
+      if (sent) await logRef.set({ date, keys: [...log], updatedAt: Date.now() }, { merge: true });
+      return ok({ slot, devices: subs.length, sent });
+    }
 
     if (slot === "evening") {
       let sent = 0;
@@ -63,10 +83,14 @@ export async function POST(req: Request) {
     let sent = 0;
     const delivered = new Set<string>();
     for (const sub of subs) {
+      if (log.has(`greeting-${date}:${sub.id}`)) continue; // a retried job doesn't greet twice
       const mine = items.filter((r) => sub.prefs[r.kind]);
-      const msg = digestMessage(mine);
+      const msg = sub.prefs.greeting !== false
+        ? morningMessage({ name: personById(sub.person)?.name ?? "", date, items: mine })
+        : digestMessage(mine);
       if (!msg) continue;
       if (await sendPush(sub, { ...msg, tag: `digest-${date}` })) {
+        delivered.add(`greeting-${date}:${sub.id}`);
         sent++;
         mine.forEach((r) => delivered.add(r.key));
       }

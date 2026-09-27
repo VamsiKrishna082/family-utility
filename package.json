@@ -10,6 +10,7 @@
     "test:dates": "node --experimental-strip-types --no-warnings --test scripts/dates.test.mjs",
     "test:trips": "node --experimental-strip-types --no-warnings --test scripts/trips.test.mjs",
     "test:docs": "node --experimental-strip-types --no-warnings --test scripts/docs.test.mjs",
+    "test:nudges": "node --experimental-strip-types --no-warnings --test scripts/nudges.test.mjs",
     "test:install": "node --experimental-strip-types --no-warnings --test scripts/install.test.mjs",
     "test:nw": "node --experimental-strip-types --no-warnings --test scripts/nw-trend.test.mjs",
     "test:tax": "node --experimental-strip-types --no-warnings --test scripts/tax.test.mjs",

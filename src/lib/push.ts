@@ -10,10 +10,10 @@ import { REMINDER_KINDS, type ReminderKind } from "@/lib/reminders";
  * address, never anyone's email. Subscriptions: Firestore push_subs, one
  * doc per device, keyed by a hash of its endpoint.
  */
-export const PUSH_KINDS = [...REMINDER_KINDS, "food"] as const;
-export type PushKind = ReminderKind | "food";
+export const PUSH_KINDS = [...REMINDER_KINDS, "food", "greeting", "partner"] as const;
+export type PushKind = ReminderKind | "food" | "greeting" | "partner";
 export type PushPrefs = Record<PushKind, boolean>;
-export const DEFAULT_PREFS: PushPrefs = { dates: true, documents: true, trips: true, money: true, health: true, food: false };
+export const DEFAULT_PREFS: PushPrefs = { dates: true, documents: true, trips: true, money: true, health: true, food: false, greeting: true, partner: true };
 
 export type PushSub = {
   id: string;
