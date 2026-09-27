@@ -144,6 +144,8 @@ export type MoneyBudget = {
 
 export type MoneyDashboardResponse = {
   monthKey: string;
+  /** "In a few lines" — spend vs last month (same point in the cycle for the current month), biggest movers, savings share. */
+  insights: string[];
   isCurrentMonth: boolean;
   prevMonthKey: string;
   prevMonthLabel: string;

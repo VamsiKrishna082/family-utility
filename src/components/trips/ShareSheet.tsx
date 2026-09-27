@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, ExternalLink, Printer } from "lucide-react";
 import type { Trip } from "@/lib/trips/types";
-import { Modal, send } from "@/components/trips/shared";
+import { Chip, Modal, send } from "@/components/trips/shared";
 
 /** Private read-only journal link (days, stories, places, day photos — never money or bookings) + print. */
 export function ShareSheet({ trip, onClose, onChanged }: { trip: Trip; onClose: () => void; onChanged: () => void }) {
@@ -13,10 +13,10 @@ export function ShareSheet({ trip, onClose, onChanged }: { trip: Trip; onClose: 
   useEffect(() => setOrigin(window.location.origin), []);
   const url = trip.shareToken && origin ? `${origin}/share/trip/${trip.shareToken}` : "";
 
-  const act = async (method: "POST" | "DELETE") => {
+  const act = async (method: "POST" | "DELETE" | "PATCH", days?: 1 | 7 | 30 | null) => {
     setBusy(true);
     try {
-      await send(`/api/trips/${trip.id}/share`, method);
+      await send(`/api/trips/${trip.id}/share`, method, method === "DELETE" ? undefined : { days: days ?? null });
       onChanged();
     } finally {
       setBusy(false);
@@ -43,7 +43,19 @@ export function ShareSheet({ trip, onClose, onChanged }: { trip: Trip; onClose: 
               <button className="btn btn-plain" disabled={busy} onClick={() => act("POST")}>New link</button>
               <button className="btn btn-plain" disabled={busy} onClick={() => act("DELETE")} style={{ color: "var(--red)" }}>Stop sharing</button>
             </div>
-            <p style={{ fontSize: 12, color: "var(--faint)" }}>Anyone with the link can view it. “New link” or “Stop sharing” turns the old one off.</p>
+            <div className="flex flex-wrap items-center" style={{ gap: 6 }}>
+              <span style={{ fontSize: 12.5, color: "var(--dim)", marginRight: 2 }}>Link works:</span>
+              {([[null, "Until I stop it"], [1, "24 hours"], [7, "7 days"], [30, "30 days"]] as const).map(([d, label]) => {
+                const on = d === null ? !trip.shareExpiresAt : false;
+                return <Chip key={label} on={on} onClick={() => act("PATCH", d)}>{label}</Chip>;
+              })}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--faint)" }}>
+              {trip.shareExpiresAt
+                ? `Stops working ${new Date(trip.shareExpiresAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}. `
+                : "Works until you stop it. "}
+              Anyone with the link can view it. “New link” or “Stop sharing” turns the old one off.
+            </p>
           </>
         ) : (
           <button className="btn btn-dark" disabled={busy} onClick={() => act("POST")}>Create a share link</button>

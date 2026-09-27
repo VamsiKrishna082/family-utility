@@ -111,6 +111,8 @@ export type Trip = {
   coverImage?: { key: string; updatedAt: number };
   /** Illustrated animated cover for the destination: a scene, or "auto" to pick one from the destination's name. */
   coverArt?: "auto" | "beach" | "mountains" | "desert" | "city";
+  /** When the share link stops working (ms); absent = until sharing is turned off. */
+  shareExpiresAt?: number;
   albumFolderId?: string;
   /** Foreign trips: shared costs can be entered in this currency and converted at `rate` rupees per unit. */
   currency?: string;

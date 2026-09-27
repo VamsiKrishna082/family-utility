@@ -2,7 +2,8 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/firestore";
 import { ok, fail } from "@/lib/http";
 import { computeMonthKey, getSettings, previousMonthKey } from "@/lib/moneyEngine";
-import type { MoneyBudget, MoneyMonthSummary, MoneyTx } from "@/lib/types";
+import { monthInsights, sameDayLastCycle } from "@/lib/moneyInsights";
+import type { MoneyBudget, MoneyCategory, MoneyMonthSummary, MoneyTx } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -90,8 +91,36 @@ export async function GET(req: Request) {
       safeToSpendPerDayPaise = summary.leftPaise > 0 ? Math.floor(summary.leftPaise / daysRemaining) : 0;
     }
 
+    // "In a few lines": this month vs the last — same-point-in-cycle for the month you're in.
+    const catSnap = await db().collection("money_categories").get();
+    const expenseCats = Object.fromEntries(catSnap.docs.map((d) => d.data() as MoneyCategory).filter((c) => c.type === "expense").map((c) => [c.id, c.name]));
+    const prevSummary = prevSnap.exists ? (prevSnap.data() as MoneyMonthSummary) : null;
+    let prevForCompare = { expensePaise: prevSummary?.expensePaise ?? 0, byCategory: prevSummary?.byCategory ?? {} };
+    if (monthKey === currentMonthKey && prevSummary) {
+      const cycleStart = (mk: string) => `${mk}-${String(Math.max(1, settings.monthStartDay)).padStart(2, "0")}`;
+      const cutoff = sameDayLastCycle(today, cycleStart(monthKey), cycleStart(prevKey), cycleEndDate(prevKey, settings.monthStartDay));
+      const prevTx = await db().collection("money_tx").where("monthKey", "==", prevKey).get();
+      const byCategory: Record<string, number> = {};
+      let expensePaise = 0;
+      for (const d of prevTx.docs) {
+        const tx = d.data() as MoneyTx;
+        if (tx.date > cutoff || tx.type !== "expense") continue;
+        byCategory[tx.categoryId] = (byCategory[tx.categoryId] ?? 0) + tx.amountPaise;
+        expensePaise += tx.amountPaise;
+      }
+      prevForCompare = { expensePaise, byCategory };
+    }
+    const insights = monthInsights({
+      isCurrent: monthKey === currentMonthKey,
+      prevLabel: monthKeyLabel(prevKey),
+      cur: { expensePaise: summary.expensePaise, byCategory: summary.byCategory, incomePaise: summary.incomePaise, savingPaise: summary.savingPaise },
+      prev: prevForCompare,
+      expenseCats,
+    });
+
     return ok({
       monthKey,
+      insights,
       isCurrentMonth: monthKey === currentMonthKey,
       prevMonthKey: prevKey,
       prevMonthLabel: monthKeyLabel(prevKey),

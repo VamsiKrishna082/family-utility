@@ -14,6 +14,7 @@ export async function tripByShareToken(token: string): Promise<Trip | null> {
   const trip = doc.data() as Trip;
   const a = Buffer.from(token);
   const b = Buffer.from(trip.shareToken ?? "");
+  if (trip.shareExpiresAt && trip.shareExpiresAt < Date.now()) return null; // an expired link works like a stopped one
   return a.length === b.length && timingSafeEqual(a, b) ? normalizeTrip(trip) : null;
 }
 

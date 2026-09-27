@@ -168,6 +168,16 @@ export function MoneyDashboard() {
         </Link>
       </div>
 
+      {/* This month in a few lines */}
+      {data.insights?.length > 0 && (
+        <div className="card mb-6" style={{ padding: "16px 20px" }}>
+          <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>{data.isCurrentMonth ? "This month so far" : "That month"}, in a few lines</p>
+          <ul style={{ display: "grid", gap: 4, paddingLeft: 18, listStyle: "disc", fontSize: 13.5, color: "var(--dim)" }}>
+            {data.insights.map((line) => <li key={line}>{line}</li>)}
+          </ul>
+        </div>
+      )}
+
       {/* Recent entries */}
       <div className="card mb-8" style={{ padding: 20 }}>
         <div className="flex items-center justify-between mb-3">

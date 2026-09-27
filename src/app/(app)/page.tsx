@@ -4,9 +4,12 @@ import { OnThisDay } from "@/components/OnThisDay";
 import { UpcomingDates } from "@/components/dates/UpcomingDates";
 import { TripMemories } from "@/components/trips/TripMemories";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { TodayCard } from "@/components/TodayCard";
 
+// Rendered on the server, which runs in UTC on Cloud Run — so the hour and
+// date are taken in India time explicitly (it said "Good morning" at 2 PM).
 function greeting(): string {
-  const h = new Date().getHours();
+  const h = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", hour12: false }));
   if (h < 12) return "Good morning.";
   if (h < 17) return "Good afternoon.";
   return "Good evening.";
@@ -17,6 +20,7 @@ export default function Launcher() {
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: "Asia/Kolkata",
   });
 
   return (
@@ -26,6 +30,7 @@ export default function Launcher() {
         {greeting()}
       </h1>
       <InstallPrompt />
+      <TodayCard />
 
       <div
         className="mt-9"
