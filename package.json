@@ -10,6 +10,7 @@
     "test:dates": "node --experimental-strip-types --no-warnings --test scripts/dates.test.mjs",
     "test:trips": "node --experimental-strip-types --no-warnings --test scripts/trips.test.mjs",
     "test:docs": "node --experimental-strip-types --no-warnings --test scripts/docs.test.mjs",
+    "test:reminders": "node --import ./scripts/alias-loader.mjs --experimental-strip-types --no-warnings --test scripts/reminders.test.mjs",
     "test:range": "node --experimental-strip-types --test scripts/range.test.mjs",
     "test:food": "node --experimental-strip-types --no-warnings --test scripts/fa-day.test.mjs",
     "drive:token": "node scripts/drive-token.mjs",
@@ -28,6 +29,7 @@
     "react-dom": "^19.0.0",
     "sharp": "^0.35.4",
     "swr": "^2.2.5",
+    "web-push": "^3.6.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -36,6 +38,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/web-push": "^3.6.4",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3"
   }

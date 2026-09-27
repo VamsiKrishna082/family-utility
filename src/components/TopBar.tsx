@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Settings } from "lucide-react";
 import { signOut } from "@/lib/auth";
 
 export function TopBar({ email }: { email: string }) {
@@ -15,6 +16,9 @@ export function TopBar({ email }: { email: string }) {
       </Link>
 
       <div className="flex items-center gap-3">
+        <Link href="/settings" aria-label="Settings — reminders and install" title="Settings" className="flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: 10, color: "var(--faint)" }}>
+          <Settings size={18} />
+        </Link>
         <span
           className="inline-flex items-center justify-center rounded-full"
           style={{ width: 28, height: 28, background: "var(--amber)", color: "#fff", fontSize: 13, fontWeight: 700 }}
