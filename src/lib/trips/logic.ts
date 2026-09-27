@@ -245,3 +245,32 @@ export function wrapUp(days: TripDay[], photosByDay: Record<number, number>): Tr
     foodSpots: days.reduce((n, d) => n + (d.food?.length ?? 0), 0),
   };
 }
+
+/**
+ * Map points for the shared/printed journal, from places already looked up
+ * (cached on each day as placeGeo) — the public page never geocodes. Day
+ * order, then the order the places were written; misses (0,0) are skipped.
+ */
+export function journalPoints(days: Pick<TripDay, "day" | "places" | "placeGeo">[]): { name: string; lat: number; lon: number; day: number }[] {
+  const out: { name: string; lat: number; lon: number; day: number }[] = [];
+  for (const d of [...days].sort((a, b) => a.day - b.day)) {
+    const geo = new Map((d.placeGeo ?? []).map((g) => [g.name, g]));
+    for (const p of d.places) {
+      const g = geo.get(p);
+      if (g && (g.lat !== 0 || g.lon !== 0)) out.push({ ...g, day: d.day });
+    }
+  }
+  return out;
+}
+
+/**
+ * The page title — which is also the file name Chrome and Safari suggest for
+ * "Save as PDF", so it should read well: "Goa – trip journal (Dec 2026)".
+ * Characters that aren't allowed in file names are dropped.
+ */
+export function journalTitle(name: string, startDate?: string): string {
+  const clean = name.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "Trip";
+  const when = startDate ? new Date(`${startDate}T00:00:00Z`).toLocaleDateString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" }) : "";
+  const hasYear = /\b(19|20)\d{2}\b/.test(clean);
+  return `${clean} – trip journal${when && !hasYear ? ` (${when})` : ""}`;
+}

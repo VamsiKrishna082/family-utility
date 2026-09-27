@@ -1,7 +1,7 @@
 // Pure unit tests for Trips date maths — no Firestore, no network. Run: npm run test:trips
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { budgetBucket, directionsLink, docProblem, gapAfter, headCount, matchFolders, timelineClashes, upiLink, wrapUp, safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
+import { budgetBucket, directionsLink, journalPoints, journalTitle, docProblem, gapAfter, headCount, matchFolders, timelineClashes, upiLink, wrapUp, safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
 
 test("days ↔ end date", () => {
   assert.equal(endDateOf("2026-12-30", 5), "2027-01-03");
@@ -109,4 +109,18 @@ test("wrap-up", () => {
   const d = (day, extra = {}) => ({ tripId: "t", day, title: "", story: "", places: [], highlight: "", updatedAt: 0, updatedBy: "", ...extra });
   const w = wrapUp([d(1, { story: "x", rating: 4, mood: "😊", places: ["Fort", "Beach"] }), d(2, { rating: 5, highlight: "Sunset", places: ["beach"] })], { 1: 10, 2: 5 });
   assert.deepEqual([w.days, w.daysWritten, w.places, w.photos, w.bestDay, w.moods, w.highlights.length], [2, 1, 2, 15, 2, ["😊"], 1]);
+});
+
+test("journal map points: day order, cached places only, misses skipped", () => {
+  const pts = journalPoints([
+    { day: 2, places: ["Fort", "Nowhere"], placeGeo: [{ name: "Fort", lat: 15.1, lon: 73.9 }, { name: "Nowhere", lat: 0, lon: 0 }] },
+    { day: 1, places: ["Beach", "Market"], placeGeo: [{ name: "Beach", lat: 15.5, lon: 73.8 }] },
+  ]);
+  assert.deepEqual(pts.map((p) => `${p.day}:${p.name}`), ["1:Beach", "2:Fort"]);
+});
+
+test("journal title doubles as a clean PDF file name", () => {
+  assert.equal(journalTitle("Goa", "2026-12-20"), "Goa – trip journal (Dec 2026)");
+  assert.equal(journalTitle("Bangalore August - 2025", "2026-08-06"), "Bangalore August - 2025 – trip journal");
+  assert.equal(journalTitle('Trip: "Kerala"/Munnar'), "Trip Kerala Munnar – trip journal");
 });
