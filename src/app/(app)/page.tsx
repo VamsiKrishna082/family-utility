@@ -3,6 +3,7 @@ import { SECTIONS } from "@/lib/sections";
 import { OnThisDay } from "@/components/OnThisDay";
 import { UpcomingDates } from "@/components/dates/UpcomingDates";
 import { TripMemories } from "@/components/trips/TripMemories";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -24,6 +25,7 @@ export default function Launcher() {
       <h1 className="display" style={{ fontSize: 38, marginTop: 6, lineHeight: 1.1 }}>
         {greeting()}
       </h1>
+      <InstallPrompt />
 
       <div
         className="mt-9"
