@@ -61,6 +61,8 @@ export function DestinationArt({ theme, destination, name, titleAt = "center", c
           @keyframes da-tw { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
           @keyframes da-mist { from { transform: translateX(-60px); } to { transform: translateX(60px); } }
           @media (prefers-reduced-motion: reduce) { .dest-art * { animation: none !important; } }
+          /* Narrow (phone) banner: keep the name clear of the Cover button in the top-right corner. */
+          @container (max-width: 560px) { .dest-title-top { text-align: left !important; padding: 0 112px 0 18px !important; top: 16px !important; } }
           @media print { .dest-art * { animation: none !important; } }
         `}</style>
 
@@ -79,7 +81,7 @@ export function DestinationArt({ theme, destination, name, titleAt = "center", c
       </svg>
 
       {titleAt !== "none" && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: titleAt === "top" ? "10%" : "50%", transform: titleAt === "top" ? "none" : "translateY(-60%)", textAlign: "center", padding: "0 6%", pointerEvents: "none" }}>
+        <div className={`dest-title dest-title-${titleAt}`} style={{ position: "absolute", left: 0, right: 0, top: titleAt === "top" ? "10%" : "50%", transform: titleAt === "top" ? "none" : "translateY(-60%)", textAlign: "center", padding: "0 6%", pointerEvents: "none" }}>
           <span className="display" style={{
             display: "inline-block", maxWidth: "100%", color: "#fff", fontWeight: 700, lineHeight: 1,
             fontSize: "clamp(18px, min(9cqw, 24cqh), 110px)", letterSpacing: "0.04em", textTransform: "uppercase",
