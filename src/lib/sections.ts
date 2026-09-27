@@ -1,6 +1,6 @@
 import {
   Images, Wallet, TrendingUp, FolderLock, CalendarHeart,
-  Plane, Utensils, type LucideIcon,
+  Plane, Utensils, HeartPulse, type LucideIcon,
 } from "lucide-react";
 
 export type Section = {
@@ -23,4 +23,5 @@ export const SECTIONS: Section[] = [
   { key: "dates", name: "Dates", href: "/dates", icon: CalendarHeart, tint: "#efeee5", ink: "#6e7043", blurb: "Birthdays and more", ready: true },
   { key: "trips", name: "Trips", href: "/trips", icon: Plane, tint: "#e5efee", ink: "#2f6e6b", blurb: "Where you are going", ready: true },
   { key: "food", name: "Food", href: "/food", icon: Utensils, tint: "#f4e9e5", ink: "#a85d2f", blurb: "Food and movement, daily", ready: true },
+  { key: "health", name: "Health", href: "/health", icon: HeartPulse, tint: "#f5e8ea", ink: "#a2434f", blurb: "Visits, medicines, records", ready: true },
 ];
