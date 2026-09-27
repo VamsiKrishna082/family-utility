@@ -17,7 +17,7 @@ export default function SettingsPage() {
       </div>
       <div style={{ display: "grid", gap: 16 }}>
         <ReminderSettings />
-        <InstallPrompt />
+        <InstallPrompt always />
       </div>
     </div>
   );
