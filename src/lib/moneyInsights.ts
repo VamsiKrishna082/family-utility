@@ -39,7 +39,8 @@ export function monthInsights(input: {
     }
   }
 
-  const moves = Object.keys(expenseCats)
+  // With nothing spent last month every category would read "new this month" — skip the movers then.
+  const moves = before === 0 ? [] : Object.keys(expenseCats)
     .map((id) => ({ id, now: cur.byCategory[id] ?? 0, before: prev.byCategory[id] ?? 0 }))
     .map((m) => ({ ...m, diff: m.now - m.before }))
     .filter((m) => Math.abs(m.diff) >= MIN_MOVE_PAISE && (m.before === 0 || Math.abs(m.diff) / m.before * 100 >= MIN_MOVE_PCT))

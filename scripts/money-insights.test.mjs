@@ -30,6 +30,11 @@ test("small moves are left out; new categories are called out; past months compa
   assert.deepEqual(lines.slice(1), ["Rent: ₹15,000 — new this month."]);
 });
 
+test("no previous month: one line, no 'new this month' for every category", () => {
+  const lines = monthInsights({ isCurrent: true, prevLabel: "August 2026", cur: { expensePaise: 0, byCategory: { food: 1246700, fuel: 300000 }, incomePaise: 0, savingPaise: 0 }, prev: { expensePaise: 0, byCategory: {} }, expenseCats: cats });
+  assert.deepEqual(lines, ["₹15,467 spent so far — nothing to compare with in August."]);
+});
+
 test("nothing spent anywhere → no lines", () => {
   assert.deepEqual(monthInsights({ isCurrent: true, prevLabel: "Aug 2026", cur: { expensePaise: 0, byCategory: {}, incomePaise: 0, savingPaise: 0 }, prev: { expensePaise: 0, byCategory: {} }, expenseCats: cats }), []);
 });
