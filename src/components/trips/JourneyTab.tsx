@@ -20,10 +20,19 @@ const MOODS = ["😍", "😊", "🙂", "😐", "😴", "😣"];
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 
 function Stars({ value, onChange, size = 16 }: { value?: number; onChange?: (n: number | null) => void; size?: number }) {
+  // Display-only stars sit inside the day card's header button, and a button
+  // can't contain another button — so draw plain icons when there's nothing to click.
+  if (!onChange) {
+    return (
+      <span className="flex items-center" style={{ gap: 2 }} role="img" aria-label={`${value ?? 0} out of 5 stars`}>
+        {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={size} color="#a8741a" fill={value && n <= value ? "#a8741a" : "none"} />)}
+      </span>
+    );
+  }
   return (
     <span className="flex items-center" style={{ gap: 2 }}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <button key={n} onClick={() => onChange?.(value === n ? null : n)} disabled={!onChange} aria-label={`${n} star${n === 1 ? "" : "s"}`} style={{ cursor: onChange ? "pointer" : "default" }}>
+        <button key={n} onClick={() => onChange(value === n ? null : n)} aria-label={`${n} star${n === 1 ? "" : "s"}`}>
           <Star size={size} color="#a8741a" fill={value && n <= value ? "#a8741a" : "none"} />
         </button>
       ))}
