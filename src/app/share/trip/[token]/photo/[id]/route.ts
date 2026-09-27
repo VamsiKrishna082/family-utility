@@ -1,5 +1,5 @@
 import { serveThumb, thumbWidth } from "@/lib/thumbs";
-import { dayPhotos, sharedDays, tripByShareToken } from "@/lib/trips/shared";
+import { sharedPhotoAllowed } from "@/lib/trips/shared";
 
 export const runtime = "nodejs";
 
@@ -11,13 +11,17 @@ export const runtime = "nodejs";
  */
 export async function GET(req: Request, ctx: { params: Promise<{ token: string; id: string }> }) {
   const { token, id } = await ctx.params;
-  const trip = await tripByShareToken(token);
-  if (!trip) return new Response("Not found", { status: 404 });
-  const days = await sharedDays(trip);
-  for (const day of days) {
-    if ((await dayPhotos(day)).some((p) => p.id === id)) {
-      return serveThumb(id, thumbWidth(Number(new URL(req.url).searchParams.get("w") ?? 520)));
-    }
+  let ok: boolean;
+  try {
+    ok = await sharedPhotoAllowed(token, id);
+  } catch {
+    // Drive/Firestore hiccup — say "try again", never "doesn't exist".
+    return new Response("Busy, try again", { status: 503, headers: { "Retry-After": "2", "Cache-Control": "no-store" } });
   }
-  return new Response("Not found", { status: 404 });
+  if (!ok) return new Response("Not found", { status: 404 });
+  try {
+    return await serveThumb(id, thumbWidth(Number(new URL(req.url).searchParams.get("w") ?? 520)));
+  } catch {
+    return new Response("Busy, try again", { status: 503, headers: { "Retry-After": "2", "Cache-Control": "no-store" } });
+  }
 }
