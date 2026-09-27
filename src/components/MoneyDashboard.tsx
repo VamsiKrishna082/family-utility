@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
-import { ChevronLeft, ChevronRight, Plus, PiggyBank, CreditCard } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, PiggyBank, CreditCard, Receipt } from "lucide-react";
 import { formatPaise, formatPaiseExact, parseRupeesToPaise } from "@/lib/money";
 import type { MoneyCreditCardsResponse, MoneyDashboardResponse, MoneyCategoriesResponse, MoneyGoalsResponse, MoneyTx } from "@/lib/types";
 import { MoneyQuickAdd } from "@/components/MoneyQuickAdd";
@@ -116,6 +116,9 @@ export function MoneyDashboard() {
             <span style={{ fontSize: 13.5, fontWeight: 600, minWidth: 92, textAlign: "center" }}>{displayMonth ? monthKeyLabel(displayMonth) : ""}</span>
             <button aria-label="Next month" onClick={() => setViewMonth(shiftMonthKey(displayMonth!, 1))}><ChevronRight size={16} /></button>
           </div>
+          <Link href="/money/tax" className="btn btn-plain flex items-center gap-1.5" title="Tax pack — this financial year's totals and documents">
+            <Receipt size={15} /> <span className="hidden sm:inline">Tax pack</span>
+          </Link>
           <button className="btn btn-dark flex items-center gap-1.5" onClick={() => setQuickAddOpen(true)}>
             <Plus size={15} /> <span className="hidden sm:inline">Add entry</span>
           </button>
