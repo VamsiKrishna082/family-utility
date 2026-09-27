@@ -32,7 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const key = `trips/${id}/cover/${randomBytes(8).toString("hex")}.webp`;
     await gcsUpload(key, webp, "image/webp");
     const coverImage = { key, updatedAt: Date.now() };
-    await tripsCol().doc(id).update({ coverImage, coverPhotoId: FieldValue.delete(), updatedAt: Date.now() });
+    await tripsCol().doc(id).update({ coverImage, coverPhotoId: FieldValue.delete(), coverArt: FieldValue.delete(), updatedAt: Date.now() });
     if (trip.coverImage?.key) await gcsDelete(trip.coverImage.key).catch(() => undefined);
     return ok({ coverImage });
   } catch (e) {

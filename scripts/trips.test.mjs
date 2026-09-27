@@ -1,6 +1,7 @@
 // Pure unit tests for Trips date maths — no Firestore, no network. Run: npm run test:trips
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { artTheme, artTitle, seeded } from "../src/lib/trips/art.ts";
 import { budgetBucket, directionsLink, journalPoints, journalTitle, docProblem, gapAfter, headCount, matchFolders, timelineClashes, upiLink, wrapUp, safeUrl, settleUp, dateOfDay, dayHasContent, endDateOf, phaseOf, rangeLabel, tripStatus, tripWhen } from "../src/lib/trips/logic.ts";
 
 test("days ↔ end date", () => {
@@ -123,4 +124,29 @@ test("journal title doubles as a clean PDF file name", () => {
   assert.equal(journalTitle("Goa", "2026-12-20"), "Goa – trip journal (Dec 2026)");
   assert.equal(journalTitle("Bangalore August - 2025", "2026-08-06"), "Bangalore August - 2025 – trip journal");
   assert.equal(journalTitle('Trip: "Kerala"/Munnar'), "Trip Kerala Munnar – trip journal");
+});
+
+test("cover art: scene from the destination", () => {
+  assert.equal(artTheme("Goa"), "beach");
+  assert.equal(artTheme("North Goa, India"), "beach");
+  assert.equal(artTheme("Manali"), "mountains");
+  assert.equal(artTheme("Leh Ladakh"), "mountains");
+  assert.equal(artTheme("Jaisalmer"), "desert");
+  assert.equal(artTheme("Dubai"), "desert");
+  assert.equal(artTheme("Bangalore"), "city");
+  assert.equal(artTheme("", "Weekend in the hills"), "mountains");
+  assert.equal(artTheme("Vietnam"), "city");
+  assert.equal(artTheme("Ha Long Bay"), "beach");
+  // whole words only: "Legoa" is not Goa
+  assert.equal(artTheme("Legoa"), "city");
+});
+
+test("cover art: seeded variety is stable per place", () => {
+  const a = seeded("Bangalore"), b = seeded("Bangalore"), c = seeded("Chennai");
+  const xs = [a(), a(), a()];
+  assert.deepEqual(xs, [b(), b(), b()]);
+  assert.notDeepEqual(xs, [c(), c(), c()]);
+  assert.ok(xs.every((x) => x >= 0 && x < 1));
+  assert.equal(artTitle("  ", "Honeymoon"), "Honeymoon");
+  assert.equal(artTitle("Munnar", "x"), "Munnar");
 });

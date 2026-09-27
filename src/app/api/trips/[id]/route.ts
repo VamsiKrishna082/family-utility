@@ -60,11 +60,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       updatedAt: Date.now(),
     };
     // null clears an optional field (a start date of null turns the trip back into an idea)
-    for (const k of ["startDate", "budgetRupees", "coverPhotoId", "currency", "rate"] as const) {
+    for (const k of ["startDate", "budgetRupees", "coverPhotoId", "coverArt", "currency", "rate"] as const) {
       if (patch[k] === null) update[k] = FieldValue.delete();
     }
-    // Picking a day photo as the cover replaces your own uploaded cover image.
-    const dropCustom = typeof patch.coverPhotoId === "string" && trip.coverImage;
+    // One cover at a time: a day photo or the illustrated art replaces your
+    // own uploaded image, and each replaces the other.
+    const pickedPhoto = typeof patch.coverPhotoId === "string";
+    const pickedArt = typeof patch.coverArt === "string";
+    if (pickedPhoto) update.coverArt = FieldValue.delete();
+    if (pickedArt) update.coverPhotoId = FieldValue.delete();
+    const dropCustom = (pickedPhoto || pickedArt) && trip.coverImage;
     if (dropCustom) update.coverImage = FieldValue.delete();
     await tripsCol().doc(id).update(update);
     if (dropCustom) await gcsDelete(trip.coverImage!.key).catch(() => undefined);

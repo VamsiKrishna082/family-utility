@@ -69,6 +69,7 @@ export const TripFields = z.object({
   budgetPlan: z.record(z.enum(BUDGET_KEYS), Rupees).default({}),
   notes: z.string().max(4000).default(""),
   coverPhotoId: z.string().max(200).nullable().optional(),
+  coverArt: z.enum(["auto", "beach", "mountains", "desert", "city"]).nullable().optional(),
   currency: z.string().trim().max(8).nullable().optional(),
   rate: z.number().positive().max(100_000).nullable().optional(),
   bookings: z.array(z.object({

@@ -30,7 +30,7 @@ export function TripPage({ id }: { id: string }) {
 
   const { trip, days, hiddenDays } = data;
   const status = tripStatus(trip.startDate, trip.endDate, today);
-  const hasCover = Boolean(trip.coverImage || trip.coverPhotoId);
+  const hasCover = true; // a photo, your image, or the illustrated destination art
   const onCoverChanged = () => { mutate(); };
   // Open where it's useful: planning before the trip, the journal during/after.
   const active: Tab = tab ?? (status === "ongoing" || status === "completed" ? "journey" : "plan");
@@ -53,7 +53,7 @@ export function TripPage({ id }: { id: string }) {
         </div>
       </div>
 
-      <Cover trip={trip} height={220} radius={18}>
+      <Cover trip={trip} height={220} radius={18} titleAt="top">
         <CoverPicker trip={trip} onChanged={onCoverChanged} />
         <div style={{ position: "absolute", inset: 0, background: hasCover ? "linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0) 60%)" : "none" }} />
         <div style={{ position: "absolute", left: 20, right: 20, bottom: 18, color: hasCover ? "#fff" : "var(--ink)" }}>
@@ -66,7 +66,6 @@ export function TripPage({ id }: { id: string }) {
           </p>
         </div>
       </Cover>
-      {!hasCover && <p style={{ fontSize: 12, color: "var(--faint)", marginTop: 6 }}>Tip: use “Cover” to upload your own image, or tap the ☆ on any day photo on the Journey tab.</p>}
       {trip.notes && <p className="card mt-4" style={{ padding: 14, fontSize: 14, whiteSpace: "pre-wrap" }}>{trip.notes}</p>}
 
       <div className="flex my-5" style={{ gap: 4, padding: 4, borderRadius: 12, background: "var(--card)", border: "1px solid var(--line)", width: "fit-content" }} role="tablist">

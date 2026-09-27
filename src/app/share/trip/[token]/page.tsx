@@ -5,6 +5,8 @@ import { dateOfDay, dayLabel, journalPoints, journalTitle, rangeLabel, wrapUp } 
 import { dayPhotos, sharedDays, tripByShareToken } from "@/lib/trips/shared";
 import { PrintButton } from "@/components/trips/PrintButton";
 import { PlacesMap } from "@/components/trips/TripMap";
+import { DestinationArt } from "@/components/trips/DestinationArt";
+import { artTheme } from "@/lib/trips/art";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +36,11 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
   }));
   const wrap = wrapUp(days, Object.fromEntries(withPhotos.map((w) => [w.day.day, w.photos.length])));
   const photo = (id: string, w = 520) => `/share/trip/${token}/photo/${id}?w=${w}`;
-  // Your own uploaded cover first, then the ☆ day photo, then the trip's first photo.
-  const coverPhoto = trip.coverPhotoId ?? withPhotos.find((w) => w.photos.length)?.photos[0]?.id;
+  // Your own uploaded cover, else the ☆ day photo, else the illustrated art if you picked it,
+  // else the trip's first photo — and the art when there are no photos at all.
+  const coverPhoto = trip.coverPhotoId ?? (trip.coverArt ? undefined : withPhotos.find((w) => w.photos.length)?.photos[0]?.id);
   const coverUrl = trip.coverImage ? `/share/trip/${token}/cover?v=${trip.coverImage.updatedAt}` : coverPhoto ? photo(coverPhoto, 1600) : null;
+  const artScene = trip.coverArt && trip.coverArt !== "auto" ? trip.coverArt : artTheme(trip.destination, trip.name);
   const points = journalPoints(days);
   const photoCount = new Map(withPhotos.map((w) => [w.day.day, w.photos.length]));
   const best = wrap.bestDay ? days.find((d) => d.day === wrap.bestDay) : undefined;
@@ -68,9 +72,13 @@ export default async function SharedTripPage({ params }: { params: Promise<{ tok
         }
         @page { margin: 14mm; }
       `}</style>
-      {coverUrl && (
+      {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="share-cover" src={coverUrl} alt="" style={{ width: "100%", height: 320, objectFit: "cover", borderRadius: 18, marginBottom: 24 }} />
+      ) : (
+        <div className="share-cover" style={{ position: "relative", width: "100%", height: 320, borderRadius: 18, overflow: "hidden", marginBottom: 24 }}>
+          <DestinationArt theme={artScene} destination={trip.destination} name={trip.name} />
+        </div>
       )}
       <div className="flex items-start justify-between" style={{ gap: 16 }}>
         <div>

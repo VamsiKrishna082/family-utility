@@ -109,6 +109,8 @@ export type Trip = {
   coverPhotoId?: string;
   /** Your own cover image (uploaded, stored in GCS) — shown instead of coverPhotoId when set. */
   coverImage?: { key: string; updatedAt: number };
+  /** Illustrated animated cover for the destination: a scene, or "auto" to pick one from the destination's name. */
+  coverArt?: "auto" | "beach" | "mountains" | "desert" | "city";
   albumFolderId?: string;
   /** Foreign trips: shared costs can be entered in this currency and converted at `rate` rupees per unit. */
   currency?: string;

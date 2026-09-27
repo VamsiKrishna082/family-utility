@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Plane } from "lucide-react";
+import { DestinationArt } from "@/components/trips/DestinationArt";
+import { artTheme, type ArtTheme } from "@/lib/trips/art";
 import type { Trip, TripStatus } from "@/lib/trips/types";
 
 export { Chip, inputStyle, labelStyle, Modal } from "@/components/dates/shared";
@@ -46,7 +47,7 @@ export function StatusPill({ status }: { status: TripStatus }) {
 }
 
 /** Cover image for a trip card / header: the chosen Album photo, else a soft gradient with a plane. */
-type CoverOf = Pick<Trip, "id" | "coverPhotoId" | "coverImage">;
+type CoverOf = Pick<Trip, "id" | "coverPhotoId" | "coverImage" | "coverArt" | "destination" | "name">;
 
 /** The trip's cover: your own uploaded image first, else the day photo picked with ☆. */
 export function coverSrc(t: CoverOf): string | null {
@@ -55,7 +56,15 @@ export function coverSrc(t: CoverOf): string | null {
   return null;
 }
 
-export function Cover({ trip, height, radius = 14, children }: { trip: CoverOf; height: number; radius?: number; children?: ReactNode }) {
+/** The illustrated scene for a trip — the one you picked, else one matched to the destination. */
+export const coverTheme = (t: Pick<Trip, "coverArt" | "destination" | "name">): ArtTheme =>
+  t.coverArt && t.coverArt !== "auto" ? t.coverArt : artTheme(t.destination, t.name);
+
+/**
+ * The trip's cover: your uploaded image or ☆ day photo when set, otherwise
+ * the illustrated, animated destination art (which fits any screen shape).
+ */
+export function Cover({ trip, height, radius = 14, titleAt = "center", children }: { trip: CoverOf; height: number; radius?: number; titleAt?: "top" | "center" | "none"; children?: ReactNode }) {
   const src = coverSrc(trip);
   return (
     <div style={{ position: "relative", height, borderRadius: radius, overflow: "hidden", background: "linear-gradient(135deg, #e5efee 0%, #f2ece2 100%)" }}>
@@ -63,9 +72,7 @@ export function Cover({ trip, height, radius = 14, children }: { trip: CoverOf; 
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : (
-        <span className="flex items-center justify-center" style={{ position: "absolute", inset: 0 }}>
-          <Plane size={height / 4} color="#2f6e6b" strokeWidth={1.4} opacity={0.35} />
-        </span>
+        <DestinationArt theme={coverTheme(trip)} destination={trip.destination} name={trip.name} titleAt={titleAt} />
       )}
       {children}
     </div>
