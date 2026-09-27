@@ -26,7 +26,7 @@ const Body = z.object({
  */
 export async function PUT(req: Request) {
   try {
-    const { person: me } = await requirePerson();
+    const { me } = await requirePerson();
     const body = Body.parse(await req.json());
     const person = body.person ? personById(body.person) : me;
     if (!person) throw new BadRequest("Unknown person");

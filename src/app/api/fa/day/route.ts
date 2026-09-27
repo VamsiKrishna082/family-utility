@@ -20,7 +20,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  */
 export async function GET(req: Request) {
   try {
-    const { person: me } = await requirePerson();
+    const { me } = await requirePerson();
     const url = new URL(req.url);
     const today = todayIST();
     const date = url.searchParams.get("date") ?? today;

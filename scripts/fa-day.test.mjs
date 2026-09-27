@@ -2,7 +2,7 @@
 // Run: npm run test:food
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeDayTotals, dayStatus, loggingStreak, scaleNutrition, shiftDate } from "../src/lib/fa/day.ts";
+import { computeDayTotals, dayStatus, kcalLeft, loggingStreak, scaleNutrition, shiftDate } from "../src/lib/fa/day.ts";
 import { burnedKcal, computeTargets, effectiveTarget, limitCheck } from "../src/lib/fa/targets.ts";
 
 const entry = (kcal, protein = 0, carbs = 0, fat = 0, fibre = 0) => ({ kcal, protein, carbs, fat, fibre });
@@ -34,6 +34,9 @@ test("status is neutral: not logged / on target (±10%) / over / under", () => {
   assert.equal(dayStatus({ entryCount: 3, eatenKcal: 2600, burnedKcal: 0, targetKcal: 2000 }), "over");
   assert.equal(dayStatus({ entryCount: 3, eatenKcal: 1200, burnedKcal: 0, targetKcal: 2000 }), "under");
   assert.equal(dayStatus({ entryCount: 1, eatenKcal: 5000, burnedKcal: 0, targetKcal: null }), "on");
+  // With an eating limit, exercise doesn't buy more food: 2300 eaten vs a 2050 limit is over.
+  assert.equal(dayStatus({ entryCount: 3, eatenKcal: 2300, burnedKcal: 320, targetKcal: 2050, eatingLimit: true }), "over");
+  assert.equal(dayStatus({ entryCount: 3, eatenKcal: 2000, burnedKcal: 320, targetKcal: 2050, eatingLimit: true }), "on");
 });
 
 test("streak counts logged days and only breaks on a day with no entries", () => {
@@ -82,4 +85,11 @@ test("your own limit: floored at BMR only with a profile; blocks only increases 
   assert.equal(limitCheck(1800, 1950, 2000, "block"), "ok");
   assert.equal(limitCheck(2300, 2100, 2000, "block"), "ok"); // removing food on an over day is always fine
   assert.equal(limitCheck(1800, 2100, null, "block"), "ok");
+});
+
+test("kcal left: one rule for limit (eaten only) and profile target (net)", () => {
+  assert.equal(kcalLeft({ target: 1800, eaten: 1500, burned: 300, eatingLimit: true }), 300);
+  assert.equal(kcalLeft({ target: 1800, eaten: 1500, burned: 300, eatingLimit: false }), 600);
+  assert.equal(kcalLeft({ target: 1800, eaten: 2000, burned: 0, eatingLimit: true }), -200);
+  assert.equal(kcalLeft({ target: null, eaten: 900, burned: 0, eatingLimit: false }), null);
 });

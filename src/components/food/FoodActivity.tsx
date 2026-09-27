@@ -33,11 +33,11 @@ function showDinnerNudge(pd: FaPersonDay, isToday: boolean): boolean {
 }
 
 type Modal =
-  | { kind: "add"; meal: FaMeal }
+  | { kind: "add"; meal: FaMeal; personId: string }
   | { kind: "entry"; entry: FaEntry }
   | { kind: "movement"; personId: string }
-  | { kind: "setup" }
-  | { kind: "meal"; meal: FaMeal };
+  | { kind: "setup"; personId: string }
+  | { kind: "meal"; meal: FaMeal; personId: string };
 
 export function FoodActivity() {
   const today = todayIST();
@@ -61,6 +61,8 @@ export function FoodActivity() {
   const other = data.people.find((p) => !p.isYou)!;
   const viewed = viewIdx === 0 ? me : other;
   const grouped = byMeal(viewed.entries);
+  const pdOf = (id: string) => data.people.find((p) => p.person.id === id) ?? me;
+  const logFor = (pd: FaPersonDay, meal?: FaMeal) => setModal({ kind: "add", meal: meal ?? (isToday ? mealNow() : "lunch"), personId: pd.person.id });
   const strip = dateRange(today, 7);
 
   const dateNav = (
@@ -117,12 +119,12 @@ export function FoodActivity() {
         )}
 
         {showDinnerNudge(viewed, isToday) && (
-          <button onClick={() => setModal({ kind: "add", meal: "dinner" })} className="fa-card flex items-center justify-between" style={{ padding: "12px 16px", fontSize: 14, fontWeight: 600 }}>
+          <button onClick={() => logFor(viewed, "dinner")} className="fa-card flex items-center justify-between" style={{ padding: "12px 16px", fontSize: 14, fontWeight: 600 }}>
             Log dinner? <span style={{ color: "var(--fa-accent)" }}>Add</span>
           </button>
         )}
 
-        <Hero pd={viewed} isToday={isToday} onSetup={viewed.isYou ? () => setModal({ kind: "setup" }) : undefined} />
+        <Hero pd={viewed} isToday={isToday} onSetup={() => setModal({ kind: "setup", personId: viewed.person.id })} />
         <Macros pd={viewed} />
 
         <section className="flex flex-col" style={{ gap: 12 }}>
@@ -131,8 +133,8 @@ export function FoodActivity() {
               key={m}
               meal={m}
               items={grouped[m]}
-              editable={viewed.isYou}
-              onAdd={() => setModal({ kind: "add", meal: m })}
+              editable
+              onAdd={() => logFor(viewed, m)}
               onItem={(entry) => setModal({ kind: "entry", entry })}
             />
           ))}
@@ -141,19 +143,17 @@ export function FoodActivity() {
         <Movement pd={viewed} editable onEdit={() => setModal({ kind: "movement", personId: viewed.person.id })} />
         <Week pd={viewed} />
 
-        {viewed.isYou && (
-          <button onClick={() => setModal({ kind: "setup" })} className="fa-btn flex items-center justify-center" style={{ gap: 6 }}>
-            <Settings2 size={15} /> Targets &amp; weight
-          </button>
-        )}
+        <button onClick={() => setModal({ kind: "setup", personId: viewed.person.id })} className="fa-btn flex items-center justify-center" style={{ gap: 6 }}>
+          <Settings2 size={15} /> {viewed.isYou ? "Targets, limit & weight" : `${viewed.person.name}'s targets, limit & weight`}
+        </button>
 
-        {viewed.isYou && (
+        {(
           <button
-            onClick={() => setModal({ kind: "add", meal: isToday ? mealNow() : "lunch" })}
+            onClick={() => logFor(viewed)}
             className="fixed flex items-center"
             style={{ right: 16, bottom: 28, zIndex: 40, height: 56, padding: "0 24px", borderRadius: 18, background: "var(--fa-accent)", color: "#fff", fontSize: 16, fontWeight: 700, boxShadow: "0 6px 18px rgba(31,29,26,.18)" }}
           >
-            + Log food
+            {viewed.isYou ? "+ Log food" : `+ Log for ${viewed.person.name}`}
           </button>
         )}
       </div>
@@ -169,8 +169,8 @@ export function FoodActivity() {
           </div>
           <div className="flex items-center" style={{ gap: 12 }}>
             {dateNav}
-            <button className="fa-btn" style={{ height: 52 }} onClick={() => setModal({ kind: "setup" })} aria-label="Targets and weight"><Settings2 size={18} /></button>
-            <button className="fa-btn fa-btn-primary" style={{ height: 52, padding: "0 22px", fontSize: 15 }} onClick={() => setModal({ kind: "add", meal: isToday ? mealNow() : "lunch" })}>
+            <button className="fa-btn" style={{ height: 52 }} onClick={() => setModal({ kind: "setup", personId: me.person.id })} aria-label="Your targets, limit and weight"><Settings2 size={18} /></button>
+            <button className="fa-btn fa-btn-primary" style={{ height: 52, padding: "0 22px", fontSize: 15 }} onClick={() => logFor(me)}>
               + Log food
             </button>
           </div>
@@ -187,12 +187,13 @@ export function FoodActivity() {
               isToday={isToday}
               wide
               title={<span className="fa-serif" style={{ fontSize: 24 }}>{pd.isYou ? "You" : pd.person.name}</span>}
-              onSetup={pd.isYou ? () => setModal({ kind: "setup" }) : undefined}
+              onSetup={() => setModal({ kind: "setup", personId: pd.person.id })}
+              onLog={pd.isYou ? undefined : () => logFor(pd)}
             />
           ))}
           {[me, other].map((pd) => <Macros key={`macros-${pd.person.id}`} pd={pd} wide />)}
           {[me, other].map((pd) => (
-            <MealsSummary key={`meals-${pd.person.id}`} entries={pd.entries} onMeal={pd.isYou ? (meal) => setModal({ kind: "meal", meal }) : undefined} />
+            <MealsSummary key={`meals-${pd.person.id}`} entries={pd.entries} onMeal={(meal) => setModal({ kind: "meal", meal, personId: pd.person.id })} />
           ))}
           {[me, other].map((pd) => (
             <Movement key={`move-${pd.person.id}`} pd={pd} editable onEdit={() => setModal({ kind: "movement", personId: pd.person.id })} wide />
@@ -233,7 +234,9 @@ export function FoodActivity() {
           date={date}
           initialMeal={modal.meal}
           aiEnabled={data.aiEnabled}
-          budget={{ target: me.targetKcal, eaten: me.day?.eatenKcal ?? 0, mode: me.limit?.mode }}
+          personId={modal.personId}
+          personName={pdOf(modal.personId).isYou ? undefined : pdOf(modal.personId).person.name}
+          budget={{ target: pdOf(modal.personId).targetKcal, eaten: pdOf(modal.personId).day?.eatenKcal ?? 0, burned: pdOf(modal.personId).day?.burnedKcal ?? 0, mode: pdOf(modal.personId).limit?.mode }}
           onClose={close}
           onAdded={refresh}
         />
@@ -242,14 +245,14 @@ export function FoodActivity() {
       {modal?.kind === "movement" && (
         <MovementSheet pd={data.people.find((p) => p.person.id === modal.personId) ?? me} date={date} onClose={close} onSaved={refresh} />
       )}
-      {modal?.kind === "setup" && <SetupSheet pd={me} date={date} onClose={close} onSaved={refresh} />}
+      {modal?.kind === "setup" && <SetupSheet key={modal.personId} pd={pdOf(modal.personId)} date={date} onClose={close} onSaved={refresh} />}
       {modal?.kind === "meal" && (
-        <Sheet onClose={close} label={FA_MEAL_LABEL[modal.meal]}>
+        <Sheet onClose={close} label={`${FA_MEAL_LABEL[modal.meal]}${pdOf(modal.personId).isYou ? "" : ` · ${pdOf(modal.personId).person.name}`}`}>
           <MealCard
             meal={modal.meal}
-            items={byMeal(me.entries)[modal.meal]}
+            items={byMeal(pdOf(modal.personId).entries)[modal.meal]}
             editable
-            onAdd={() => setModal({ kind: "add", meal: modal.meal })}
+            onAdd={() => setModal({ kind: "add", meal: modal.meal, personId: modal.personId })}
             onItem={(entry) => setModal({ kind: "entry", entry })}
           />
         </Sheet>

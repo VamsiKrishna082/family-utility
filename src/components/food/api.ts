@@ -1,14 +1,23 @@
-/** Tiny fetch helpers shared by the Food & activity components. */
-export async function getJson<T>(url: string): Promise<T> {
-  const r = await fetch(url);
+/**
+ * Tiny fetch helpers shared by the Food & activity components. `as` names
+ * the person the request is for (logging or targets for the other of you);
+ * it travels in a header the server checks. SWR keys add "#<person>" so each
+ * person's data is cached separately — fetch never sends the "#…" part.
+ */
+const ACT_FOR = "x-fa-person";
+const actFor = (as?: string): Record<string, string> => (as ? { [ACT_FOR]: as } : {});
+
+export async function getJson<T>(url: string, as?: string): Promise<T> {
+  const [path, hashAs] = url.split("#");
+  const r = await fetch(path, { headers: actFor(as ?? hashAs) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Could not load");
   return r.json();
 }
 
-export async function send<T = unknown>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
+export async function send<T = unknown>(url: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown, as?: string): Promise<T> {
   const r = await fetch(url, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers: { ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...actFor(as) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Something went wrong");

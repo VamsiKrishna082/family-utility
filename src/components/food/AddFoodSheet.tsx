@@ -6,7 +6,7 @@ import { ChevronLeft, ScanBarcode, Star, Minus, Plus, Camera, Sparkles, Loader2 
 import { BarcodeScanner } from "@/components/food/BarcodeScanner";
 import { fmt, Sheet } from "@/components/food/parts";
 import { fileToJpegBase64, getJson, send } from "@/components/food/api";
-import { scaleNutrition } from "@/lib/fa/day";
+import { kcalLeft, scaleNutrition } from "@/lib/fa/day";
 import {
   FA_MEALS, FA_MEAL_LABEL, FA_NUTRIENTS, FA_SOURCES, FA_SOURCE_LABEL,
   type FaFood, type FaMeal, type FaNutrient, type FaNutrition, type FaQuickResponse, type FaSearchResponse, type FaSource,
@@ -56,13 +56,16 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 export function AddFoodSheet({
-  date, initialMeal, aiEnabled, onClose, onAdded, budget,
+  date, initialMeal, aiEnabled, onClose, onAdded, budget, personId, personName,
 }: {
   date: string;
   initialMeal: FaMeal;
   aiEnabled: boolean;
-  /** Today's target, what's eaten so far, and your limit's mode — for "X kcal left" and blocking over-limit adds. */
-  budget?: { target: number | null; eaten: number; mode?: "block" | "warn" };
+  /** Target, eaten and burned so far, and the limit's mode — for "X kcal left" and blocking over-limit adds (same rule as the day's hero). */
+  budget?: { target: number | null; eaten: number; burned: number; mode?: "block" | "warn" };
+  /** Whose log this adds to; the other person's name is shown so it's never logged to the wrong one. */
+  personId: string;
+  personName?: string;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -93,11 +96,11 @@ export function AddFoodSheet({
   const detailRef = useRef<HTMLDivElement>(null);
 
   const { data: search, isLoading: searching } = useSWR<FaSearchResponse>(
-    dq.length >= 2 && !barcodeResults ? `/api/fa/foods/search?q=${encodeURIComponent(dq)}` : null,
+    dq.length >= 2 && !barcodeResults ? `/api/fa/foods/search?q=${encodeURIComponent(dq)}#${personId}` : null,
     getJson,
     { keepPreviousData: true },
   );
-  const { data: quick } = useSWR<FaQuickResponse>(`/api/fa/quick?date=${date}&meal=${meal}`, getJson);
+  const { data: quick } = useSWR<FaQuickResponse>(`/api/fa/quick?date=${date}&meal=${meal}#${personId}`, getJson);
   const results = barcodeResults ?? (dq.length >= 2 ? search?.results ?? [] : []);
 
   const gpb = selected?.gramsPerBase;
@@ -112,7 +115,7 @@ export function AddFoodSheet({
   const totalGrams = custom
     ? (customPer100 && gramsN > 0 ? gramsN : undefined)
     : gpb && serving ? Math.round(serving.mult * gpb * qty) : undefined;
-  const left = budget?.target ? budget.target - budget.eaten : null;
+  const left = budget ? kcalLeft({ target: budget.target, eaten: budget.eaten, burned: budget.burned, eatingLimit: Boolean(budget.mode) }) : null;
   const overLimit: "ok" | "warn" | "block" = left !== null && total && total.kcal > left && total.kcal > 0 ? (budget?.mode === "block" ? "block" : budget?.mode === "warn" ? "warn" : "ok") : "ok";
   const gramsInvalid = (byGrams || (custom && customPer100)) && !(gramsN > 0);
 
@@ -198,7 +201,7 @@ export function AddFoodSheet({
     if (selected.sourceBase) {
       food = { ...selected, name: selected.name.replace(/ — your version$/, ""), base: selected.sourceBase, source: sourceOfKey(selected.key) };
       if (resetToSource) {
-        await send(`/api/fa/foods/override?key=${encodeURIComponent(selected.key)}`, "DELETE");
+        await send(`/api/fa/foods/override?key=${encodeURIComponent(selected.key)}`, "DELETE", undefined, personId);
         overrideBase = undefined;
       } else if (!overrideBase) {
         overrideBase = selected.base;
@@ -211,7 +214,7 @@ export function AddFoodSheet({
       grams: totalGrams,
       nutrition: total,
       overrideBase,
-    });
+    }, personId);
     finish();
   });
 
@@ -229,7 +232,7 @@ export function AddFoodSheet({
       grams: totalGrams,
       nutrition: scaleNutrition(perServing, customPer100 ? gramsN / 100 : qty),
       overrideBase: perServing,
-    });
+    }, personId);
     finish();
   });
 
@@ -240,12 +243,12 @@ export function AddFoodSheet({
     await send("/api/fa/foods/favourite", "PUT", {
       on: next,
       food: { key: selected.key, name: selected.name.replace(/ — your version$/, ""), brand: selected.brand, barcode: selected.barcode, source: sourceOfKey(selected.key), baseLabel: selected.baseLabel, gramsPerBase: selected.gramsPerBase, base: selected.sourceBase ?? selected.base, servings: selected.servings },
-    });
+    }, personId);
   });
 
   const repeat = () => run("repeat", async () => {
     if (!quick?.repeat) return;
-    await send("/api/fa/entries/repeat", "POST", { fromDate: quick.repeat.fromDate, meal: quick.repeat.meal, toDate: date, toMeal: meal });
+    await send("/api/fa/entries/repeat", "POST", { fromDate: quick.repeat.fromDate, meal: quick.repeat.meal, toDate: date, toMeal: meal }, personId);
     finish();
   });
 
@@ -259,12 +262,12 @@ export function AddFoodSheet({
       servingLabel: e.servingLabel,
       grams: e.grams,
       nutrition: { kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, fibre: e.fibre },
-    });
+    }, personId);
     finish();
   });
 
   const estimate = (body: { text?: string; image?: { data: string; mediaType: string } }) => run("ai", async () => {
-    const { food } = await send<{ food: FaFood }>("/api/fa/foods/estimate", "POST", body);
+    const { food } = await send<{ food: FaFood }>("/api/fa/foods/estimate", "POST", body, personId);
     select(food);
   });
 
@@ -280,7 +283,7 @@ export function AddFoodSheet({
   const onBarcode = (code: string) => {
     setScanning(false);
     run("barcode", async () => {
-      const res = await getJson<FaSearchResponse>(`/api/fa/foods/search?barcode=${code}`);
+      const res = await getJson<FaSearchResponse>(`/api/fa/foods/search?barcode=${code}`, personId);
       if (!res.results.length) {
         setBarcodeResults([]);
         setError(`No product found for ${code}. Search by name or enter it yourself.`);
@@ -314,9 +317,16 @@ export function AddFoodSheet({
           </button>
           <div className="flex flex-col" style={{ gap: 2 }}>
             <h1 className="fa-serif" style={{ margin: 0, fontSize: 24 }}>Add to {FA_MEAL_LABEL[meal].toLowerCase()}</h1>
+            {personName && (
+              <span style={{ alignSelf: "flex-start", fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "var(--fa-ink)", color: "#fff" }}>
+                Logging for {personName}
+              </span>
+            )}
             {left !== null && (
               <span style={{ fontSize: 12.5, color: left <= 0 ? "#b44b44" : "var(--fa-dim)", fontWeight: 600 }}>
-                {left > 0 ? `${fmt(left)} kcal left of ${fmt(budget!.target!)}` : `Limit of ${fmt(budget!.target!)} kcal reached`}
+                {left > 0
+                  ? `${fmt(left)} kcal left of ${fmt(budget!.target!)}${budget?.mode ? " (daily limit)" : ""}`
+                  : budget?.mode ? `Daily limit of ${fmt(budget!.target!)} kcal reached` : `Target of ${fmt(budget!.target!)} kcal reached`}
               </span>
             )}
           </div>

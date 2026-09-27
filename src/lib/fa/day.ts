@@ -28,13 +28,27 @@ export function computeDayTotals(entries: Pick<FaEntry, keyof FaNutrition>[]): F
  * food.md: not logged if no food entries; on target if net kcal is within
  * ±10% of target; over/under otherwise. Without a target yet, a logged day
  * counts as logged but can't be judged, so it reads as "on".
+ *
+ * With your own daily limit set, the limit is about what you *eat*, so the
+ * day is judged on eaten kcal (no credit for exercise) — the same number the
+ * "don't let me log past it" check uses, so the two never disagree.
  */
-export function dayStatus({ entryCount, eatenKcal, burnedKcal, targetKcal }: { entryCount: number; eatenKcal: number; burnedKcal: number; targetKcal: number | null }): FaStatus {
+export function dayStatus({ entryCount, eatenKcal, burnedKcal, targetKcal, eatingLimit = false }: { entryCount: number; eatenKcal: number; burnedKcal: number; targetKcal: number | null; eatingLimit?: boolean }): FaStatus {
   if (entryCount === 0) return "none";
   if (!targetKcal) return "on";
-  const net = eatenKcal - burnedKcal;
+  const net = eatingLimit ? eatenKcal : eatenKcal - burnedKcal;
   if (Math.abs(net - targetKcal) <= targetKcal * 0.1) return "on";
   return net > targetKcal ? "over" : "under";
+}
+
+/**
+ * What's left today, one rule everywhere (hero, add-food sheet, status):
+ * against your own limit it's limit − eaten; against a profile target it's
+ * target − (eaten − burned), per food.md. Null without any target.
+ */
+export function kcalLeft({ target, eaten, burned, eatingLimit }: { target: number | null; eaten: number; burned: number; eatingLimit: boolean }): number | null {
+  if (target === null) return null;
+  return Math.round(target - (eatingLimit ? eaten : eaten - burned));
 }
 
 /** Nutrition for `qty` of a serving, from a food's base values. */

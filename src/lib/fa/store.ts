@@ -78,7 +78,7 @@ export function buildDay(
     stepsSource: "manual",
     targetKcal,
     proteinTargetG: profile?.proteinG ?? null,
-    status: dayStatus({ entryCount: totals.entryCount, eatenKcal: totals.kcal, burnedKcal: burned, targetKcal }),
+    status: dayStatus({ entryCount: totals.entryCount, eatenKcal: totals.kcal, burnedKcal: burned, targetKcal, eatingLimit: Boolean(limit) }),
     updatedAt: Date.now(),
   };
 }
@@ -113,12 +113,12 @@ export async function changeEntries(
 
     const day = buildDay(daySnap.exists ? (daySnap.data() as FaDay) : null, person, date, [...byId.values()], profile, undefined, limit);
 
-    // Your own limit, in "block" mode: food that would take the day past it isn't logged.
+    // The person's own limit, in "block" mode: food that would take the day past it isn't logged.
     const before = current.reduce((s, e) => s + e.kcal, 0);
     if (!opts.force && limitCheck(before, day.eatenKcal, day.targetKcal, limit?.mode) === "block") {
       const room = Math.max(0, (day.targetKcal ?? 0) - before);
       throw new BadRequest(
-        `Not logged — that would take today to ${Math.round(day.eatenKcal).toLocaleString("en-IN")} kcal, over your ${Math.round(day.targetKcal!).toLocaleString("en-IN")} kcal limit. ${room ? `You have ${Math.round(room).toLocaleString("en-IN")} kcal left.` : "You've reached it for today."}`,
+        `Not logged — that would take today to ${Math.round(day.eatenKcal).toLocaleString("en-IN")} kcal, over the ${Math.round(day.targetKcal!).toLocaleString("en-IN")} kcal daily limit. ${room ? `You have ${Math.round(room).toLocaleString("en-IN")} kcal left.` : "You've reached it for today."}`,
         409,
       );
     }

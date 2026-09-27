@@ -1,5 +1,6 @@
 "use client";
 
+import { kcalLeft } from "@/lib/fa/day";
 import type { ReactNode } from "react";
 import { FA_MEALS, FA_MEAL_LABEL, FA_STATUS_LABEL, type FaEntry, type FaMeal, type FaPersonDay, type FaStatus } from "@/lib/fa/types";
 
@@ -31,26 +32,33 @@ function HeroStat({ label, value }: { label: string; value: string }) {
  * The dark hero: kcal left (net of burned) with eaten/burned/target beneath.
  * Neutral wording when over — "180 kcal over", never anything judgemental.
  */
-export function Hero({ pd, isToday, title, wide, onSetup }: { pd: FaPersonDay; isToday: boolean; title?: ReactNode; wide?: boolean; onSetup?: () => void }) {
+export function Hero({ pd, isToday, title, wide, onSetup, onLog }: { pd: FaPersonDay; isToday: boolean; title?: ReactNode; wide?: boolean; onSetup?: () => void; onLog?: () => void }) {
   const day = pd.day;
   const eaten = day?.eatenKcal ?? 0;
   const burned = day?.burnedKcal ?? 0;
   const target = pd.targetKcal;
-  const left = target !== null ? target - (eaten - burned) : null;
-  const pct = target ? Math.max(0, Math.min(100, ((eaten - burned) / target) * 100)) : 0;
+  // Same rule as the add sheet and the day status: a daily limit counts what's eaten; a profile target counts eaten − burned.
+  const eatingLimit = Boolean(pd.limit);
+  const left = kcalLeft({ target, eaten, burned, eatingLimit });
+  const used = eatingLimit ? eaten : eaten - burned;
+  const pct = target ? Math.max(0, Math.min(100, (used / target) * 100)) : 0;
   const status: FaStatus = day?.status ?? "none";
 
   return (
     <section style={{ padding: wide ? 24 : 20, borderRadius: wide ? 18 : 20, background: "var(--fa-hero)", color: "#fff", display: "flex", flexDirection: "column", gap: wide ? 14 : 16 }}>
       <div className="flex items-center justify-between" style={{ gap: 10 }}>
         {title ?? <span style={{ fontSize: 13, fontWeight: 600, color: "var(--fa-hero-dim)" }}>{isToday ? "Left today" : "Left that day"}</span>}
-        <StatusPill status={status} />
+        <span className="flex items-center" style={{ gap: 8 }}>
+          {onLog && <button onClick={onLog} style={{ height: 30, padding: "0 12px", borderRadius: 999, background: "#fff", color: "var(--fa-ink)", fontSize: 12.5, fontWeight: 700 }}>+ Log</button>}
+          {onSetup && target !== null && <button onClick={onSetup} aria-label="Targets and limit" style={{ height: 30, padding: "0 10px", borderRadius: 999, background: "rgba(255,255,255,.16)", color: "#fff", fontSize: 12.5, fontWeight: 600 }}>{eatingLimit ? "Limit" : "Target"}</button>}
+          <StatusPill status={status} />
+        </span>
       </div>
       {left === null ? (
         <div className="flex flex-col" style={{ gap: 10 }}>
           <span className="fa-serif" style={{ fontSize: wide ? 36 : 40, lineHeight: 1 }}>{fmt(eaten)} kcal</span>
           {onSetup ? (
-            <button onClick={onSetup} className="fa-btn" style={{ alignSelf: "flex-start", background: "#fff" }}>Set your daily target</button>
+            <button onClick={onSetup} className="fa-btn" style={{ alignSelf: "flex-start", background: "#fff" }}>{pd.isYou ? "Set your daily target" : `Set ${pd.person.name}'s daily target`}</button>
           ) : (
             <span style={{ fontSize: 13, color: "var(--fa-hero-dim)" }}>No target set yet</span>
           )}
@@ -68,7 +76,7 @@ export function Hero({ pd, isToday, title, wide, onSetup }: { pd: FaPersonDay; i
         <HeroStat label="Eaten" value={fmt(eaten)} />
         <HeroStat label="Burned" value={fmt(burned)} />
         {wide && <HeroStat label="Steps" value={fmt(day?.steps ?? 0)} />}
-        <HeroStat label="Target" value={target !== null ? fmt(target) : "—"} />
+        <HeroStat label={eatingLimit ? "Limit" : "Target"} value={target !== null ? fmt(target) : "—"} />
       </div>
     </section>
   );

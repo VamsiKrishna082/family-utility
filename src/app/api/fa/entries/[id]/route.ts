@@ -17,24 +17,22 @@ const Patch = z.object({
   nutrition: Nutrition.optional(),
 });
 
-async function ownEntry(id: string, person: string): Promise<FaEntry> {
+/** Either of you may fix either log (one phone at dinner); the change is applied to the log the entry belongs to. */
+async function getEntry(id: string): Promise<FaEntry> {
   const snap = await db().collection(COL.entries).doc(id).get();
   if (!snap.exists) throw new BadRequest("Entry not found", 404);
-  const entry = snap.data() as FaEntry;
-  // Both can see both logs; only you edit yours.
-  if (entry.person !== person) throw new BadRequest("You can only change your own log", 403);
-  return entry;
+  return snap.data() as FaEntry;
 }
 
 /** Change quantity or grams (nutrition rescales with either), move to another meal, or correct the numbers. */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { person } = await requirePerson();
+    await requirePerson();
     const { id } = await ctx.params;
     const patch = Patch.parse(await req.json());
-    const old = await ownEntry(id, person.id);
+    const old = await getEntry(id);
 
-    const day = await changeEntries(person.id, old.date, (current) => {
+    const day = await changeEntries(old.person, old.date, (current) => {
       const cur = current.find((e) => e.id === id) ?? old;
       if (patch.grams && cur.grams) {
         const grams = Math.round(patch.grams);
@@ -58,10 +56,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { person } = await requirePerson();
+    await requirePerson();
     const { id } = await ctx.params;
-    const old = await ownEntry(id, person.id);
-    const day = await changeEntries(person.id, old.date, () => ({ deletes: [id] }));
+    const old = await getEntry(id);
+    const day = await changeEntries(old.person, old.date, () => ({ deletes: [id] }));
     return ok({ day });
   } catch (e) {
     return fail(e);

@@ -52,7 +52,7 @@ export function SetupSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay; da
         manualTargetKcal: Number(manual) ? Math.round(Number(manual)) : null,
         stepGoal: Math.max(1000, Math.round(Number(stepGoal) || 10000)),
         remindersOn: reminders,
-      });
+      }, pd.person.id);
       onSaved();
       if (res.flooredManual) {
         setNote("Saved. The target you typed was below your floor, so the floor is used instead.");
@@ -70,7 +70,7 @@ export function SetupSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay; da
     setBusy(true);
     setError("");
     try {
-      const res = await send<{ weightAvg7: number }>("/api/fa/weight", "PUT", { date, weightKg: kg });
+      const res = await send<{ weightAvg7: number }>("/api/fa/weight", "PUT", { date, weightKg: kg }, pd.person.id);
       setWeight(String(res.weightAvg7));
       setTodayWeight("");
       setNote(`Logged. 7-day average: ${res.weightAvg7} kg${p ? " — targets updated from it" : ""}.`);
@@ -86,8 +86,12 @@ export function SetupSheet({ pd, date, onClose, onSaved }: { pd: FaPersonDay; da
     <Sheet onClose={onClose} label="Targets">
       <div className="flex flex-col" style={{ gap: 16 }}>
         <div className="flex flex-col" style={{ gap: 4 }}>
-          <h2 className="fa-serif" style={{ margin: 0, fontSize: 22 }}>{p ? "Your targets" : "Set up your targets"}</h2>
-          <span style={{ fontSize: 13, color: "var(--fa-dim)" }}>Only you can change these. Both of you can see each other&apos;s day.</span>
+          <h2 className="fa-serif" style={{ margin: 0, fontSize: 22 }}>
+            {pd.isYou ? (p ? "Your targets" : "Set up your targets") : `${pd.person.name}'s targets`}
+          </h2>
+          <span style={{ fontSize: 13, color: "var(--fa-dim)" }}>
+            {pd.isYou ? "Either of you can set these for the other, too." : `You're setting these for ${pd.person.name}.`}
+          </span>
         </div>
 
         <LimitCard pd={pd} onSaved={onSaved} />
@@ -183,7 +187,7 @@ function LimitCard({ pd, onSaved }: { pd: FaPersonDay; onSaved: () => void }) {
     setBusy(true);
     setMsg("");
     try {
-      const res = await send<{ target: number | null; floored: boolean }>("/api/fa/limit", "PUT", { kcal: value, mode });
+      const res = await send<{ target: number | null; floored: boolean }>("/api/fa/limit", "PUT", { kcal: value, mode }, pd.person.id);
       setMsg(value === null ? "Limit removed." : res.floored ? `Saved — your target is ${fmt(res.target ?? 0)} kcal (your BMR floor).` : `Saved — ${fmt(value)} kcal a day.`);
       if (value === null) setKcal("");
       onSaved();
@@ -196,7 +200,7 @@ function LimitCard({ pd, onSaved }: { pd: FaPersonDay; onSaved: () => void }) {
 
   return (
     <div className="fa-card flex flex-col" style={{ padding: 14, gap: 10 }}>
-      <span className="fa-label">Daily calorie limit</span>
+      <span className="fa-label">Daily calorie limit{pd.isYou ? "" : ` · ${pd.person.name}`}</span>
       <div className="flex" style={{ gap: 8 }}>
         <input className="fa-input flex-1" inputMode="numeric" placeholder="e.g. 1800" value={kcal} onChange={(e) => setKcal(e.target.value.replace(/\D/g, ""))} aria-label="Daily calorie limit" />
         <span className="flex items-center" style={{ fontSize: 13, color: "var(--fa-dim)" }}>kcal</span>
@@ -215,7 +219,9 @@ function LimitCard({ pd, onSaved }: { pd: FaPersonDay; onSaved: () => void }) {
         {pd.limit && <button className="fa-btn" disabled={busy} onClick={() => save(null)}>Remove</button>}
       </div>
       <span style={{ fontSize: 12, color: "var(--fa-dim)" }}>
-        {msg || (pd.profile ? "Overrides the target worked out from your profile." : "Works on its own — no need to fill in the profile below.")}
+        {msg || (pd.profile
+          ? "Overrides the target from the profile. It counts what's eaten — exercise doesn't add more room."
+          : "Works on its own — no need to fill in the profile below. It counts what's eaten; exercise doesn't add more room.")}
       </span>
     </div>
   );
