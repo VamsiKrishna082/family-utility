@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, MapPin, Pencil, Share2, Trash2, Users } from "lucide-react";
@@ -20,6 +20,12 @@ export function TripPage({ id }: { id: string }) {
   const router = useRouter();
   const { data, error, mutate, saveTrip } = useTrip(id);
   const [tab, setTab] = useState<Tab | null>(null);
+  // A link to a day (e.g. from search: /trips/<id>#trip-day-3) opens the Journey tab on that day.
+  const [focusDay, setFocusDay] = useState<number | null>(null);
+  useEffect(() => {
+    const m = /^#trip-day-(\d+)$/.exec(window.location.hash);
+    if (m) { setTab("journey"); setFocusDay(Number(m[1])); }
+  }, []);
   const [editing, setEditing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -83,7 +89,7 @@ export function TripPage({ id }: { id: string }) {
       </div>
 
       {active === "plan" && <PlanTab trip={trip} saveTrip={saveTrip} me={data.me} onChanged={() => mutate()} />}
-      {active === "journey" && <JourneyTab trip={trip} days={days} hiddenDays={hiddenDays} onChanged={() => mutate()} saveTrip={saveTrip} />}
+      {active === "journey" && <JourneyTab trip={trip} days={days} hiddenDays={hiddenDays} onChanged={() => mutate()} saveTrip={saveTrip} focusDay={focusDay} />}
       {active === "expenses" && <ExpensesTab trip={trip} saveTrip={saveTrip} onTripChanged={() => mutate()} />}
 
       <div className="flex justify-end mt-8">

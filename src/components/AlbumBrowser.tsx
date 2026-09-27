@@ -27,7 +27,7 @@ async function patchItem(id: string, folder: string, body: Record<string, unknow
   });
 }
 
-export function AlbumBrowser({ folderId }: { folderId: string | null }) {
+export function AlbumBrowser({ folderId, openId = null }: { folderId: string | null; openId?: string | null }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const key = `/api/browse?folder=${folderId ?? "root"}`;
 
@@ -138,6 +138,14 @@ export function AlbumBrowser({ folderId }: { folderId: string | null }) {
   };
 
   const openAt = (item: Entry) => setLightbox(media.findIndex((m) => m.id === item.id));
+
+  // Arriving with ?open=<photo> (e.g. from search): open it once the folder has loaded.
+  const openedFromLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openId || openedFromLink.current === openId) return;
+    const i = media.findIndex((m) => m.id === openId);
+    if (i >= 0) { openedFromLink.current = openId; setLightbox(i); }
+  }, [openId, media]);
 
   /**
    * Trashes in Drive (recoverable there), removing the tile immediately rather

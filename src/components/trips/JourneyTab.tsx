@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { Check, ChevronDown, ChevronUp, FolderOpen, FolderSearch, Heart, ImageIcon, MapPin, Plus, Star, Trophy, Utensils, X } from "lucide-react";
@@ -456,7 +456,7 @@ function FolderSuggestions({ trip, onClose, onLinked }: { trip: Trip; onClose: (
 }
 
 /** The journal: wrap-up, one card per day (mood, story, voice, places, food, photos), the map. */
-export function JourneyTab({ trip, days, hiddenDays, onChanged, saveTrip }: { trip: Trip; days: TripDay[]; hiddenDays: number[]; onChanged: () => void; saveTrip: (patch: Partial<Trip>) => Promise<void> }) {
+export function JourneyTab({ trip, days, hiddenDays, onChanged, saveTrip, focusDay = null }: { trip: Trip; days: TripDay[]; hiddenDays: number[]; onChanged: () => void; saveTrip: (patch: Partial<Trip>) => Promise<void>; focusDay?: number | null }) {
   const today = todayIST();
   const status = tripStatus(trip.startDate, trip.endDate, today);
   const todayDay = status === "ongoing" && trip.startDate ? daysBetween(trip.startDate, today) + 1 : null;
@@ -470,6 +470,11 @@ export function JourneyTab({ trip, days, hiddenDays, onChanged, saveTrip }: { tr
 
   const toggle = (n: number) => setOpenDays((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x; });
   const openDay = (n: number) => { setOpenDays((s) => new Set(s).add(n)); setTimeout(() => document.getElementById(`trip-day-${n}`)?.scrollIntoView({ behavior: "smooth" }), 50); };
+  // Arriving from a link to one day: open it and scroll there.
+  useEffect(() => {
+    if (focusDay && days.some((d) => d.day === focusDay)) openDay(focusDay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusDay]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-5 items-start">

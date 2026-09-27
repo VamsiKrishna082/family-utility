@@ -149,6 +149,6 @@ async function findAlbum(q: string): Promise<FindHit[]> {
     id: e.id,
     title: e.name,
     sub: [e.kind === "folder" ? "Folder" : e.kind === "video" ? "Video" : "Photo", e.path].filter(Boolean).join(" · "),
-    url: e.kind === "folder" ? `/album?folder=${e.id}` : e.parentId ? `/album?folder=${e.parentId}` : "/album",
+    url: e.kind === "folder" ? `/album?folder=${e.id}` : e.parentId ? `/album?folder=${e.parentId}&open=${e.id}` : "/album",
   }));
 }
