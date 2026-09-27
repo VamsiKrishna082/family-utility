@@ -5,6 +5,7 @@ import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { ChevronLeft, ChevronRight, Pencil, ShieldCheck, PiggyBank, ClipboardCheck, TrendingUp, CalendarClock } from "lucide-react";
 import { formatPaise, formatPaiseExact } from "@/lib/money";
+import { NetWorthTrend } from "@/components/NetWorthTrend";
 import type { NwDashboardResponse, NwAssetClass, NwAccountRow, NwHeldBy } from "@/lib/types";
 
 const fetcher = async (url: string) => {
@@ -215,6 +216,8 @@ export function NetWorthDashboard() {
           </p>
         </div>
       </div>
+
+      <NetWorthTrend />
 
       {/* Trend + Allocation */}
       <div className="mb-8 grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-5">
